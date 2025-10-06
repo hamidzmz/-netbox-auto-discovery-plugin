@@ -12,7 +12,32 @@ NC='\033[0m' # No Color
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NETBOX_DOCKER_DIR="${SCRIPT_DIR}/netbox-docker"
-PLUGIN_DIR="${SCRIPT_DIR}/netbox-netbox-auto-discovery-plugin"
+PLUGIN_DIR="${SCRIPT_echo ""
+echo -eecho -echo -e "${YELLOW}5. Create a Scanner:${NC}"
+   a) Network Range Scan:"
+echo "      - Name: Test Network Scan"
+echo "      - Type: Network Range Scan"
+echo "      - IP Range: 192.168.1.0/24 (adjust to your network)"
+echo "      - Status: Active"
+echo ""
+echo "   b) Cisco Switch Scan (requires Cisco device):"
+echo "      - Name: Test Cisco Scan"
+echo "      - Type: Cisco Switch Scan"
+echo "      - Target Host: <your-cisco-switch-ip>"
+echo "      - Port: 22 (SSH) or 161 (SNMP)"
+echo "      - Protocol: SSH or SNMP"
+echo "      - Username/Password or Community String"
+echo ""
+echo -e "${YELLOW}6. Run a Scan:${NC}"avigate to the Plugin:${NC}"
+echo "   Click: Plugins → Auto Discovery → Scanners"
+echo ""
+echo -e "${YELLOW}5. Create a Scanner:${NC}"YELLOW}2. Access NetBox:${NC}"
+   Open your browser and navigate to: http://localhost:8000"
+echo ""
+echo -e "${YELLOW}3. Login:${NC}"
+echo "   Use the username and password you created in step 1"
+echo ""
+echo -e "${YELLOW}4. Navigate to the Plugin:${NC}"ox-netbox-auto-discovery-plugin"
 
 echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║     NetBox Auto Discovery Plugin - Monorepo Setup           ║${NC}"
@@ -215,22 +240,6 @@ docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/man
 print_success "Static files collected"
 echo ""
 
-# Create superuser
-print_status "Creating superuser account (admin/admin)..."
-
-docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell <<'EOF'
-from django.contrib.auth import get_user_model
-User = get_user_model()
-if not User.objects.filter(username='admin').exists():
-    User.objects.create_superuser('admin', 'admin@example.com', 'admin')
-    print('✓ Superuser created successfully')
-else:
-    print('! Superuser already exists')
-EOF
-
-print_success "Superuser ready"
-echo ""
-
 # Verify plugin is installed
 print_status "Verifying plugin installation..."
 plugin_check=$(docker compose exec -T netbox /opt/netbox/venv/bin/pip list | grep netbox-netbox-auto-discovery-plugin || true)
@@ -244,9 +253,9 @@ echo ""
 
 # Restart NetBox to ensure everything is loaded
 print_status "Restarting NetBox services to load plugin..."
-docker compose restart netbox netbox-worker
+docker compose restart netbox
 sleep 10
-print_success "Services restarted"
+print_success "NetBox restarted"
 echo ""
 
 # Wait for NetBox to be fully ready
@@ -275,6 +284,23 @@ fi
 
 echo ""
 
+# Ensure NetBox worker is started (critical for background jobs!)
+print_status "Starting NetBox worker for background job processing..."
+docker compose up -d netbox-worker
+
+# Wait for worker to be healthy
+sleep 5
+worker_status=$(docker compose ps netbox-worker --format json 2>/dev/null | grep -o '"Health":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
+
+if [ "$worker_status" = "healthy" ] || docker compose ps netbox-worker | grep -q "Up"; then
+    print_success "NetBox worker is running"
+else
+    print_warning "Worker may still be starting. This is needed for scan jobs!"
+    print_info "Check with: docker compose ps netbox-worker"
+fi
+
+echo ""
+
 # Show service status
 print_status "Service Status:"
 echo ""
@@ -293,14 +319,30 @@ echo -e "${CYAN}║                   Access Information                        
 echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${BLUE}NetBox URL:${NC}       http://localhost:8000"
-echo -e "${BLUE}Username:${NC}         admin"
-echo -e "${BLUE}Password:${NC}         admin"
+echo ""
+echo -e "${YELLOW}⚠️  IMPORTANT: Create Superuser${NC}"
+echo ""
+echo "Before you can login, you need to create a superuser account:"
+echo ""
+echo -e "${CYAN}cd $NETBOX_DOCKER_DIR${NC}"
+echo -e "${CYAN}docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py createsuperuser${NC}"
+echo ""
+echo "Follow the prompts to create your admin account."
 echo ""
 echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║                    Quick Start Guide                         ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${YELLOW}1. Access NetBox:${NC}"
+echo -e "${YELLOW}1. Create Superuser:${NC}"
+echo "   cd $NETBOX_DOCKER_DIR"
+echo "   docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py createsuperuser"
+echo ""
+echo "   OR use non-interactive mode:"
+echo "   docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py createsuperuser --noinput --username admin --email admin@example.com"
+echo "   # Then set password:"
+echo "   echo \"from django.contrib.auth import get_user_model; User = get_user_model(); user = User.objects.get(username='admin'); user.set_password('admin'); user.save()\" | docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell"
+echo ""
+echo -e "${YELLOW}2. Access NetBox:${NC}"
 echo "   Open your browser and navigate to: http://localhost:8000"
 echo ""
 echo -e "${YELLOW}2. Login:${NC}"
@@ -325,7 +367,7 @@ echo "      - Port: 22 (SSH) or 161 (SNMP)"
 echo "      - Protocol: SSH or SNMP"
 echo "      - Username/Password or Community String"
 echo ""
-echo -e "${YELLOW}5. Run a Scan:${NC}"
+echo -e "${YELLOW}6. Run a Scan:${NC}"
 echo "   - Click on your scanner"
 echo "   - Click the 'Run Scan' button"
 echo "   - View results in the 'Scan Runs' tab"
@@ -402,10 +444,15 @@ echo ""
 echo "  1. Check logs:"
 echo "     cd $NETBOX_DOCKER_DIR && docker compose logs -f netbox"
 echo ""
-echo "  2. Verify all containers are running:"
+echo "  2. Verify all containers are running (including netbox-worker):"
 echo "     cd $NETBOX_DOCKER_DIR && docker compose ps"
 echo ""
-echo "  3. Restart services:"
+echo "  3. If netbox-worker is not running (CRITICAL for scans):"
+echo "     cd $NETBOX_DOCKER_DIR"
+echo "     docker compose up -d netbox-worker"
+echo "     docker compose logs -f netbox-worker"
+echo ""
+echo "  4. Restart services:"
 echo "     cd $NETBOX_DOCKER_DIR && docker compose restart"
 echo ""
 echo "  4. Full rebuild (WARNING: destroys all data):"

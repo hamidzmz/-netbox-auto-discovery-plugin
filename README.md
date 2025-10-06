@@ -37,10 +37,34 @@ chmod +x setup-monorepo.sh
 - ✅ Build NetBox with the plugin
 - ✅ Start all services (PostgreSQL, Redis, NetBox)
 - ✅ Run database migrations
-- ✅ Create admin user (admin/admin)
 - ✅ Configure everything automatically
 
-After 5-10 minutes, open your browser to **http://localhost:8000** and login with `admin` / `admin`.
+After setup completes, **create a superuser** and then access NetBox at **http://localhost:8000**.
+
+### Create Your Admin User
+
+After the setup script completes, create a superuser account:
+
+```bash
+cd netbox-docker
+docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py createsuperuser
+```
+
+Follow the prompts to set your username, email, and password.
+
+**Quick non-interactive method** (creates admin/admin):
+
+```bash
+cd netbox-docker
+
+# Create the user
+docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py createsuperuser --noinput --username admin --email admin@example.com
+
+# Set the password
+echo "from django.contrib.auth import get_user_model; User = get_user_model(); user = User.objects.get(username='admin'); user.set_password('admin'); user.save(); print('Password set!')" | docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell
+```
+
+Then login at **http://localhost:8000** with your credentials.
 
 ---
 
@@ -109,10 +133,10 @@ The **NetBox Auto Discovery Plugin** automatically discovers and inventories net
 
 ### Step 1: Access NetBox
 
-After running `setup-monorepo.sh`, open:
+After running `setup-monorepo.sh` and creating your superuser account, open:
 - **URL:** http://localhost:8000
-- **Username:** admin
-- **Password:** admin
+- **Username:** Your chosen username (e.g., admin)
+- **Password:** Your chosen password
 
 ### Step 2: Navigate to Plugin
 
@@ -303,6 +327,36 @@ docker compose exec netbox /opt/netbox/venv/bin/pip list | grep auto-discovery
 ---
 
 ## 🐛 Troubleshooting
+
+### ⚠️ **CRITICAL: Scans Not Running / Stuck in Pending**
+
+**Symptom:** When you click "Run Scan", nothing happens, or scans stay in "Pending" status forever.
+
+**Cause:** The `netbox-worker` container is not running. This container is **required** to process background jobs.
+
+**Solution:**
+```bash
+cd netbox-docker
+
+# Check if worker is running
+docker compose ps netbox-worker
+
+# If not running, start it
+docker compose up -d netbox-worker
+
+# Verify it's healthy
+docker compose ps netbox-worker
+
+# Check worker logs
+docker compose logs -f netbox-worker
+```
+
+**Why this happens:**
+- The worker depends on NetBox being healthy
+- On first setup, NetBox can take time to initialize
+- If setup finishes before NetBox is fully healthy, the worker might not start
+
+
 
 ### Port 8000 Already in Use
 ```bash
