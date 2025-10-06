@@ -150,132 +150,86 @@ fi
 print_success "Docker image built successfully"
 echo ""
 
-# Start all services
-print_status "Starting NetBox services..."
+# Start all services at once - let Docker Compose handle dependencies
+print_status "Starting all NetBox services..."
 print_info "Starting: PostgreSQL, Redis, Redis-Cache, NetBox, NetBox-Worker"
+print_info "Docker Compose will start services in the correct order based on dependencies"
 echo ""
 
-# Start base services first (postgres, redis)
-docker compose up -d postgres redis redis-cache
+docker compose up -d
 
 if [ $? -ne 0 ]; then
-    print_error "Failed to start base services"
+    print_error "Failed to start services"
+    echo ""
+    print_info "Check the configuration with: cd $NETBOX_DOCKER_DIR && docker compose config"
+    print_info "Check logs with: cd $NETBOX_DOCKER_DIR && docker compose logs"
     exit 1
 fi
 
-print_info "Base services (PostgreSQL, Redis) started, waiting for health checks..."
+print_success "All services started, waiting for health checks to pass..."
 echo ""
 
-# Wait for PostgreSQL to be ready
-print_status "Waiting for PostgreSQL to be ready..."
-max_attempts=60
-attempt=0
-
-while ! docker compose exec -T postgres pg_isready -U netbox > /dev/null 2>&1; do
-    attempt=$((attempt + 1))
-    if [ $attempt -ge $max_attempts ]; then
-        print_error "PostgreSQL failed to start after $max_attempts attempts"
-        echo ""
-        print_info "Check logs with: cd $NETBOX_DOCKER_DIR && docker compose logs postgres"
-        exit 1
-    fi
-    echo -n "."
-    sleep 2
-done
-
-echo ""
-print_success "PostgreSQL is ready"
-echo ""
-
-# Wait for Redis to be ready
-print_status "Waiting for Redis to be ready..."
-attempt=0
-max_attempts=30
-
-while ! docker compose exec -T redis redis-cli -a "${REDIS_PASSWORD:-H733kdjudDq4kt44Dfwt4}" ping > /dev/null 2>&1; do
-    attempt=$((attempt + 1))
-    if [ $attempt -ge $max_attempts ]; then
-        print_error "Redis failed to start after $max_attempts attempts"
-        exit 1
-    fi
-    echo -n "."
-    sleep 1
-done
-
-echo ""
-print_success "Redis is ready"
-echo ""
-
-# Now start NetBox service and wait for it to be healthy
-print_status "Starting NetBox application..."
-docker compose up -d netbox
-
-if [ $? -ne 0 ]; then
-    print_error "Failed to start NetBox"
-    exit 1
-fi
-
-print_info "NetBox container started, waiting for it to become healthy..."
+print_info "All services started, waiting for them to become healthy..."
 print_info "This includes running all database migrations (may take 3-5 minutes on first run)"
 echo ""
 
-# Wait for Docker's health check to pass (up to 5 minutes)
-# The docker-compose.override.yml extends healthcheck start_period to 300s
-print_status "Waiting for NetBox healthcheck to pass (timeout: 5 minutes)..."
+# Wait for all critical services to be healthy
+print_status "Waiting for all services to pass health checks (timeout: 5 minutes)..."
 echo ""
 
 attempt=0
 max_attempts=20  # 20 attempts * 15 seconds = 5 minutes total
 
 while [ $attempt -lt $max_attempts ]; do
-    # Check container health status
-    if [ "$USE_JQ" = true ]; then
-        health_status=$(docker compose ps netbox --format json 2>/dev/null | jq -r '.[0].Health // "unknown"' 2>/dev/null || echo "unknown")
-    else
-        if docker compose ps netbox | grep -q "(healthy)"; then
-            health_status="healthy"
-        elif docker compose ps netbox | grep -q "(unhealthy)"; then
-            health_status="unhealthy"
-        else
-            health_status="starting"
-        fi
-    fi
+    # Check all service health status
+    all_healthy=true
+    services_status=""
 
-    # Success! Container is healthy
-    if [ "$health_status" = "healthy" ]; then
-        echo ""
-        print_success "NetBox is healthy and ready!"
-        break
-    fi
-
-    # Container became unhealthy - something is wrong
-    if [ "$health_status" = "unhealthy" ]; then
-        echo ""
+    # Check NetBox
+    if docker compose ps netbox | grep -q "(healthy)"; then
+        netbox_status="✓"
+    elif docker compose ps netbox | grep -q "(unhealthy)"; then
         print_error "NetBox container became unhealthy"
-        echo ""
-        print_info "Showing last 50 lines of logs:"
         docker compose logs netbox --tail 50
-        echo ""
         exit 1
-    fi
-
-    # Check if container crashed
-    if ! docker compose ps netbox | grep -q "Up"; then
-        echo ""
+    elif ! docker compose ps netbox | grep -q "Up"; then
         print_error "NetBox container stopped unexpectedly"
-        echo ""
-        print_info "Showing last 50 lines of logs:"
         docker compose logs netbox --tail 50
-        echo ""
         exit 1
+    else
+        netbox_status="..."
+        all_healthy=false
     fi
 
-    # Show progress indicator
-    elapsed=$((attempt * 15))
-    if [ $((attempt % 4)) -eq 0 ]; then
-        echo -n " [${elapsed}s]"
+    # Check Worker (if it exists)
+    if docker compose ps netbox-worker | grep -q "Up" 2>/dev/null; then
+        if docker compose ps netbox-worker | grep -q "(healthy)"; then
+            worker_status="✓"
+        else
+            worker_status="..."
+            all_healthy=false
+        fi
     else
-        echo -n "."
+        worker_status="×"
+        all_healthy=false
+    fi
+
+    # Check base services
+    postgres_healthy=$(docker compose ps postgres | grep -q "(healthy)" && echo "✓" || echo "...")
+    redis_healthy=$(docker compose ps redis | grep -q "(healthy)" && echo "✓" || echo "...")
+    redis_cache_healthy=$(docker compose ps redis-cache | grep -q "(healthy)" && echo "✓" || echo "...")
+
+    # Show status
+    elapsed=$((attempt * 15))
+    printf "\r[%3ds] PostgreSQL:%s Redis:%s Cache:%s NetBox:%s Worker:%s" \
+           "$elapsed" "$postgres_healthy" "$redis_healthy" "$redis_cache_healthy" "$netbox_status" "$worker_status"
+
+    # Success! All services are healthy
+    if [ "$all_healthy" = true ]; then
+        echo ""
+        echo ""
+        print_success "All services are healthy and ready!"
+        break
     fi
 
     attempt=$((attempt + 1))
@@ -285,30 +239,24 @@ done
 # Check if we timed out
 if [ $attempt -ge $max_attempts ]; then
     echo ""
-    print_error "NetBox failed to become healthy after 5 minutes"
+    echo ""
+    print_error "Some services failed to become healthy after 5 minutes"
+    echo ""
+    print_info "Current service status:"
+    docker compose ps
     echo ""
     print_info "This might indicate:"
     echo "  - Migrations are taking longer than expected"
     echo "  - Database connection issues"
     echo "  - Plugin installation problems"
+    echo "  - NetBox worker dependency issues"
     echo ""
-    print_info "Showing last 50 lines of logs:"
-    docker compose logs netbox --tail 50
-    echo ""
-    print_info "You can check the full logs with:"
-    echo "  cd $NETBOX_DOCKER_DIR && docker compose logs -f netbox"
+    print_info "You can check the logs with:"
+    echo "  cd $NETBOX_DOCKER_DIR && docker compose logs -f"
     exit 1
 fi
 
-echo ""# Now start the worker
-print_status "Starting NetBox worker..."
-docker compose up -d netbox-worker
-
-if [ $? -ne 0 ]; then
-    print_error "Failed to start NetBox worker"
-    exit 1
-fi
-
+echo ""
 print_success "All services started successfully"
 echo ""
 
@@ -383,19 +331,17 @@ fi
 
 echo ""
 
-# Ensure NetBox worker is started (critical for background jobs!)
-print_status "Starting NetBox worker for background job processing..."
-docker compose up -d netbox-worker
+# Verify NetBox worker is running (critical for background jobs!)
+print_status "Verifying NetBox worker is running..."
 
 # Wait for worker to be healthy
 sleep 5
-worker_status=$(docker compose ps netbox-worker --format json 2>/dev/null | grep -o '"Health":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
-
-if [ "$worker_status" = "healthy" ] || docker compose ps netbox-worker | grep -q "Up"; then
-    print_success "NetBox worker is running"
+if docker compose ps netbox-worker | grep -q "Up"; then
+    print_success "NetBox worker is running and ready for background jobs"
 else
     print_warning "Worker may still be starting. This is needed for scan jobs!"
     print_info "Check with: docker compose ps netbox-worker"
+    print_info "If worker is not running, restart services: docker compose restart"
 fi
 
 echo ""
