@@ -1,0 +1,22 @@
+services:
+  netbox:
+    build:
+      context: ..
+      dockerfile: netbox-docker/Dockerfile-Plugins
+    image: netbox:latest-plugins
+    ports:
+      - "127.0.0.1:8000:8080"
+    # Note: Plugin code is COPIED into the image during build (see Dockerfile-Plugins)
+    # No editable volume mount needed for production deployment
+    # volumes:
+    #   - ../netbox-netbox-auto-discovery-plugin:/plugin/netbox-netbox-auto-discovery-plugin:rw
+    environment:
+      DEVELOPER: "true"
+
+  netbox-worker:
+    image: netbox:latest-plugins
+    # volumes:
+    #   - ../netbox-netbox-auto-discovery-plugin:/plugin/netbox-netbox-auto-discovery-plugin:rw
+    environment:
+      DEVELOPER: "true"
+

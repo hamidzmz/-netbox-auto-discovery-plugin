@@ -1,7 +1,7 @@
 *.sql.gz
 .netbox
 .python-version
-docker-compose.override.yml
+# docker-compose.override.yml  # COMMENTED OUT - we need this file in the repo!
 *.pem
 configuration/*
 !configuration/configuration.py
@@ -12,3 +12,6 @@ configuration/ldap/*
 !configuration/logging.py
 !configuration/plugins.py
 super-linter.log
+
+# Ignore only if you create a LOCAL override for development
+docker-compose.override.local.yml
