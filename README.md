@@ -23,8 +23,8 @@ This repository contains everything you need to test the NetBox Auto Discovery P
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
-cd <repo-name>
+git clone https://github.com/hamidzmz/-netbox-auto-discovery-plugin.git
+cd -netbox-auto-discovery-plugin
 
 # Make the setup script executable
 chmod +x setup-monorepo.sh
