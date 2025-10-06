@@ -211,9 +211,9 @@ print_info "NetBox container started, waiting for application to be ready..."
 echo ""
 
 # Wait for NetBox to initialize and become healthy
-print_status "Waiting for NetBox to become healthy (this may take up to 2 minutes)..."
+print_status "Waiting for NetBox to become healthy (this may take up to 5 minutes)..."
 attempt=0
-max_attempts=120  # 2 minutes with 1 second intervals
+max_attempts=300  # 3 minutes with 1 second intervals
 
 while true; do
     # Check if container is still running
@@ -224,8 +224,8 @@ while true; do
         exit 1
     fi
 
-    # Check if health check passes
-    if docker compose exec -T netbox curl -f http://localhost:8080/login/ > /dev/null 2>&1; then
+    # Check if health check passes (suppress output but check exit code)
+    if docker compose exec -T netbox curl -f -s -o /dev/null http://localhost:8080/login/; then
         break
     fi
 
@@ -233,7 +233,10 @@ while true; do
     if [ $attempt -ge $max_attempts ]; then
         print_error "NetBox failed to become healthy after $max_attempts attempts"
         echo ""
-        print_info "Check logs with: cd $NETBOX_DOCKER_DIR && docker compose logs netbox"
+        print_info "Showing last 20 lines of logs:"
+        docker compose logs netbox --tail 20
+        echo ""
+        print_info "Check full logs with: cd $NETBOX_DOCKER_DIR && docker compose logs netbox"
         exit 1
     fi
 
@@ -245,9 +248,7 @@ while true; do
     fi
 
     sleep 1
-done
-
-echo ""
+doneecho ""
 print_success "NetBox is healthy and ready"
 echo ""
 
