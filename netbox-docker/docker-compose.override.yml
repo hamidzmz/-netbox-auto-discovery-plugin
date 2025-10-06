@@ -42,10 +42,20 @@ services:
 
   netbox-worker:
     image: netbox:latest-plugins
+    depends_on:
+      netbox:
+        condition: service_healthy
+    command:
+      - /opt/netbox/venv/bin/python
+      - /opt/netbox/netbox/manage.py
+      - rqworker
     # volumes:
     #   - ../netbox-netbox-auto-discovery-plugin:/plugin/netbox-netbox-auto-discovery-plugin:rw
     environment:
       DEVELOPER: "true"
-    # Worker inherits depends_on from base config (service_healthy condition)
-    # It will automatically wait for NetBox to be healthy before starting
+    healthcheck:
+      test: ps -aux | grep -v grep | grep -q rqworker || exit 1
+      start_period: 20s
+      timeout: 3s
+      interval: 15s
 
