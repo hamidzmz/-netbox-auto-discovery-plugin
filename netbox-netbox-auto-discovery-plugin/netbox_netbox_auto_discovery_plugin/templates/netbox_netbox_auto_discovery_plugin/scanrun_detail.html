@@ -1,0 +1,205 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Scan Run Information</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Scanner</th>
+                        <td>{{ object.scanner|linkify }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Status</th>
+                        <td>
+                            {% if object.status == 'completed' %}
+                                {% badge object.get_status_display bg_color="green" %}
+                            {% elif object.status == 'failed' %}
+                                {% badge object.get_status_display bg_color="red" %}
+                            {% elif object.status == 'running' %}
+                                {% badge object.get_status_display bg_color="blue" %}
+                            {% else %}
+                                {% badge object.get_status_display bg_color="gray" %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Started At</th>
+                        <td>{{ object.started_at|date:"Y-m-d H:i:s"|default:"-" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Completed At</th>
+                        <td>{{ object.completed_at|date:"Y-m-d H:i:s"|default:"-" }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Duration</th>
+                        <td>{{ object.duration|default:"-" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Discovery Results</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">IP Addresses Discovered</th>
+                        <td><strong>{{ object.ips_discovered }}</strong></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Devices Discovered</th>
+                        <td><strong>{{ object.devices_discovered }}</strong></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Interfaces Discovered</th>
+                        <td><strong>{{ object.interfaces_discovered }}</strong></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">VLANs Discovered</th>
+                        <td><strong>{{ object.vlans_discovered }}</strong></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        {% if object.error_message %}
+        <div class="card border-danger">
+            <h5 class="card-header bg-danger text-white">Error Message</h5>
+            <div class="card-body">
+                <pre class="text-danger">{{ object.error_message }}</pre>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{% if object.log_output %}
+<div class="row mt-3">
+    <div class="col col-md-12">
+        <div class="card">
+            <h5 class="card-header">Scan Log</h5>
+            <div class="card-body">
+                <pre class="bg-dark text-light p-3" style="max-height: 500px; overflow-y: auto;"><code>{{ object.log_output }}</code></pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="row mt-3">
+    <div class="col col-md-12">
+        <div class="card">
+            <h5 class="card-header">Discovered Resources</h5>
+            <div class="card-body">
+                <ul class="nav nav-tabs" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" data-bs-toggle="tab" href="#ips">
+                            IP Addresses ({{ object.discovered_ips.count }})
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="tab" href="#devices">
+                            Devices ({{ object.discovered_devices.count }})
+                        </a>
+                    </li>
+                </ul>
+
+                <div class="tab-content p-3">
+                    <div id="ips" class="tab-pane fade show active">
+                        {% if object.discovered_ips.all %}
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>IP Address</th>
+                                    <th>Hostname</th>
+                                    <th>Action</th>
+                                    <th>Open Ports</th>
+                                    <th>Services</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ip in object.discovered_ips.all %}
+                                <tr>
+                                    <td>{{ ip.ip_address|linkify }}</td>
+                                    <td>{{ ip.hostname|default:"-" }}</td>
+                                    <td>
+                                        {% if ip.action == 'created' %}
+                                            {% badge "Created" bg_color="green" %}
+                                        {% else %}
+                                            {% badge "Updated" bg_color="blue" %}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if ip.open_ports %}
+                                            {{ ip.open_ports|join:", " }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if ip.services %}
+                                            <small>{{ ip.services|length }} service(s)</small>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <p class="text-muted">No IP addresses discovered in this scan.</p>
+                        {% endif %}
+                    </div>
+
+                    <div id="devices" class="tab-pane fade">
+                        {% if object.discovered_devices.all %}
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Device</th>
+                                    <th>Action</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for device in object.discovered_devices.all %}
+                                <tr>
+                                    <td>{{ device.device|linkify }}</td>
+                                    <td>
+                                        {% if device.action == 'created' %}
+                                            {% badge "Created" bg_color="green" %}
+                                        {% else %}
+                                            {% badge "Updated" bg_color="blue" %}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if device.discovered_data %}
+                                            <small>
+                                                Model: {{ device.discovered_data.model|default:"-" }}<br>
+                                                Serial: {{ device.discovered_data.serial|default:"-" }}
+                                            </small>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <p class="text-muted">No devices discovered in this scan.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

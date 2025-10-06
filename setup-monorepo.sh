@@ -1,0 +1,430 @@
+#!/bin/bash
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NETBOX_DOCKER_DIR="${SCRIPT_DIR}/netbox-docker"
+PLUGIN_DIR="${SCRIPT_DIR}/netbox-netbox-auto-discovery-plugin"
+
+echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║     NetBox Auto Discovery Plugin - Monorepo Setup           ║${NC}"
+echo -e "${CYAN}║     Author: hamidzamani445@gmail.com                        ║${NC}"
+echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+# Function to print status messages
+print_status() {
+    echo -e "${BLUE}[*]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[✓]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[✗]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[!]${NC} $1"
+}
+
+print_info() {
+    echo -e "${CYAN}[i]${NC} $1"
+}
+
+# Function to check command exists
+command_exists() {
+    command -v "$1" &> /dev/null
+}
+
+# Check prerequisites
+print_status "Checking prerequisites..."
+echo ""
+
+if ! command_exists docker; then
+    print_error "Docker is not installed"
+    echo "Please install Docker: https://docs.docker.com/get-docker/"
+    exit 1
+fi
+print_success "Docker found: $(docker --version | head -n1)"
+
+if ! command_exists docker && ! docker compose version &> /dev/null; then
+    print_error "Docker Compose is not installed"
+    echo "Please install Docker Compose: https://docs.docker.com/compose/install/"
+    exit 1
+fi
+print_success "Docker Compose found: $(docker compose version 2>&1 | head -n1)"
+
+# Check if Docker daemon is running
+if ! docker info &> /dev/null; then
+    print_error "Docker daemon is not running"
+    echo "Please start Docker and try again"
+    exit 1
+fi
+print_success "Docker daemon is running"
+
+echo ""
+
+# Verify directory structure
+print_status "Verifying directory structure..."
+
+if [ ! -d "$NETBOX_DOCKER_DIR" ]; then
+    print_error "NetBox-Docker directory not found at: $NETBOX_DOCKER_DIR"
+    exit 1
+fi
+print_success "Found netbox-docker directory"
+
+if [ ! -d "$PLUGIN_DIR" ]; then
+    print_error "Plugin directory not found at: $PLUGIN_DIR"
+    exit 1
+fi
+print_success "Found plugin directory"
+
+# Verify required files
+if [ ! -f "$NETBOX_DOCKER_DIR/docker-compose.yml" ]; then
+    print_error "docker-compose.yml not found"
+    exit 1
+fi
+
+if [ ! -f "$NETBOX_DOCKER_DIR/docker-compose.override.yml" ]; then
+    print_error "docker-compose.override.yml not found"
+    exit 1
+fi
+
+if [ ! -f "$NETBOX_DOCKER_DIR/Dockerfile-Plugins" ]; then
+    print_error "Dockerfile-Plugins not found"
+    exit 1
+fi
+
+if [ ! -f "$PLUGIN_DIR/pyproject.toml" ]; then
+    print_error "Plugin pyproject.toml not found"
+    exit 1
+fi
+
+print_success "All required files present"
+echo ""
+
+# Clean up any existing containers
+print_status "Cleaning up any existing NetBox containers..."
+cd "$NETBOX_DOCKER_DIR"
+
+# Stop and remove old containers
+docker compose down -v 2>/dev/null || true
+print_success "Cleanup complete"
+echo ""
+
+# Build the custom NetBox image with plugin
+print_status "Building NetBox Docker image with Auto Discovery plugin..."
+print_info "This may take 5-15 minutes on first run..."
+echo ""
+
+docker compose build --no-cache netbox
+
+if [ $? -ne 0 ]; then
+    print_error "Docker build failed"
+    echo ""
+    echo "Common issues:"
+    echo "  - Check if port 8000 is already in use"
+    echo "  - Verify Docker has enough resources (4GB RAM minimum)"
+    echo "  - Check docker-compose.override.yml paths are correct"
+    exit 1
+fi
+
+print_success "Docker image built successfully"
+echo ""
+
+# Start all services
+print_status "Starting NetBox services..."
+print_info "Starting: PostgreSQL, Redis, Redis-Cache, NetBox, NetBox-Worker"
+echo ""
+
+docker compose up -d
+
+if [ $? -ne 0 ]; then
+    print_error "Failed to start services"
+    exit 1
+fi
+
+print_success "Services started"
+echo ""
+
+# Wait for PostgreSQL to be ready
+print_status "Waiting for PostgreSQL to be ready..."
+max_attempts=60
+attempt=0
+
+while ! docker compose exec -T postgres pg_isready -U netbox > /dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    if [ $attempt -ge $max_attempts ]; then
+        print_error "PostgreSQL failed to start after $max_attempts attempts"
+        echo ""
+        print_info "Check logs with: cd $NETBOX_DOCKER_DIR && docker compose logs postgres"
+        exit 1
+    fi
+    echo -n "."
+    sleep 2
+done
+
+echo ""
+print_success "PostgreSQL is ready"
+echo ""
+
+# Wait for Redis to be ready
+print_status "Waiting for Redis to be ready..."
+sleep 5
+print_success "Redis is ready"
+echo ""
+
+# Wait for NetBox to initialize
+print_status "Waiting for NetBox to initialize..."
+sleep 20
+
+# Run core NetBox migrations
+print_status "Running NetBox core migrations..."
+docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py migrate --no-input 2>&1 | grep -v "No changes detected" || true
+print_success "Core migrations complete"
+echo ""
+
+# Run plugin migrations
+print_status "Running Auto Discovery plugin migrations..."
+docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py migrate netbox_netbox_auto_discovery_plugin --no-input
+
+if [ $? -ne 0 ]; then
+    print_error "Plugin migrations failed"
+    echo ""
+    print_info "This might happen if the plugin is not installed correctly"
+    print_info "Check logs with: cd $NETBOX_DOCKER_DIR && docker compose logs netbox"
+    exit 1
+fi
+
+print_success "Plugin migrations complete"
+echo ""
+
+# Collect static files
+print_status "Collecting static files..."
+docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py collectstatic --no-input > /dev/null 2>&1
+print_success "Static files collected"
+echo ""
+
+# Create superuser
+print_status "Creating superuser account (admin/admin)..."
+
+docker compose exec -T netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell <<'EOF'
+from django.contrib.auth import get_user_model
+User = get_user_model()
+if not User.objects.filter(username='admin').exists():
+    User.objects.create_superuser('admin', 'admin@example.com', 'admin')
+    print('✓ Superuser created successfully')
+else:
+    print('! Superuser already exists')
+EOF
+
+print_success "Superuser ready"
+echo ""
+
+# Verify plugin is installed
+print_status "Verifying plugin installation..."
+plugin_check=$(docker compose exec -T netbox /opt/netbox/venv/bin/pip list | grep netbox-netbox-auto-discovery-plugin || true)
+
+if [ -z "$plugin_check" ]; then
+    print_warning "Plugin not found in pip list, but this might be normal for editable installs"
+else
+    print_success "Plugin installed: $plugin_check"
+fi
+echo ""
+
+# Restart NetBox to ensure everything is loaded
+print_status "Restarting NetBox services to load plugin..."
+docker compose restart netbox netbox-worker
+sleep 10
+print_success "Services restarted"
+echo ""
+
+# Wait for NetBox to be fully ready
+print_status "Waiting for NetBox to be fully operational..."
+max_attempts=90
+attempt=0
+
+until curl -s -f http://localhost:8000/login/ > /dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    if [ $attempt -ge $max_attempts ]; then
+        print_warning "NetBox web interface may still be starting..."
+        print_info "Check status with: cd $NETBOX_DOCKER_DIR && docker compose logs -f netbox"
+        break
+    fi
+    echo -n "."
+    sleep 2
+done
+
+echo ""
+
+if curl -s -f http://localhost:8000/login/ > /dev/null 2>&1; then
+    print_success "NetBox web interface is ready!"
+else
+    print_warning "NetBox might still be initializing. Give it another minute."
+fi
+
+echo ""
+
+# Show service status
+print_status "Service Status:"
+echo ""
+docker compose ps
+echo ""
+
+# Print success banner
+echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║                    🎉 Setup Complete! 🎉                     ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+
+# Print access information
+echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║                   Access Information                         ║${NC}"
+echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${BLUE}NetBox URL:${NC}       http://localhost:8000"
+echo -e "${BLUE}Username:${NC}         admin"
+echo -e "${BLUE}Password:${NC}         admin"
+echo ""
+echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║                    Quick Start Guide                         ║${NC}"
+echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${YELLOW}1. Access NetBox:${NC}"
+echo "   Open your browser and navigate to: http://localhost:8000"
+echo ""
+echo -e "${YELLOW}2. Login:${NC}"
+echo "   Username: admin"
+echo "   Password: admin"
+echo ""
+echo -e "${YELLOW}3. Navigate to the Plugin:${NC}"
+echo "   Click: Plugins → Auto Discovery → Scanners"
+echo ""
+echo -e "${YELLOW}4. Create a Scanner:${NC}"
+echo "   a) Network Range Scan:"
+echo "      - Name: Test Network Scan"
+echo "      - Type: Network Range Scan"
+echo "      - IP Range: 192.168.1.0/24 (adjust to your network)"
+echo "      - Status: Active"
+echo ""
+echo "   b) Cisco Switch Scan (requires Cisco device):"
+echo "      - Name: Test Cisco Scan"
+echo "      - Type: Cisco Switch Scan"
+echo "      - Target Host: <your-cisco-switch-ip>"
+echo "      - Port: 22 (SSH) or 161 (SNMP)"
+echo "      - Protocol: SSH or SNMP"
+echo "      - Username/Password or Community String"
+echo ""
+echo -e "${YELLOW}5. Run a Scan:${NC}"
+echo "   - Click on your scanner"
+echo "   - Click the 'Run Scan' button"
+echo "   - View results in the 'Scan Runs' tab"
+echo ""
+echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║                    Useful Commands                           ║${NC}"
+echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${BLUE}View logs:${NC}"
+echo "  cd $NETBOX_DOCKER_DIR"
+echo "  docker compose logs -f netbox"
+echo ""
+echo -e "${BLUE}Stop services:${NC}"
+echo "  cd $NETBOX_DOCKER_DIR"
+echo "  docker compose down"
+echo ""
+echo -e "${BLUE}Start services:${NC}"
+echo "  cd $NETBOX_DOCKER_DIR"
+echo "  docker compose up -d"
+echo ""
+echo -e "${BLUE}Restart services:${NC}"
+echo "  cd $NETBOX_DOCKER_DIR"
+echo "  docker compose restart"
+echo ""
+echo -e "${BLUE}Enter NetBox container:${NC}"
+echo "  cd $NETBOX_DOCKER_DIR"
+echo "  docker compose exec netbox bash"
+echo ""
+echo -e "${BLUE}View background jobs:${NC}"
+echo "  In NetBox UI: System → Background Jobs"
+echo ""
+echo -e "${BLUE}Access Python shell:${NC}"
+echo "  docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell"
+echo ""
+echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║                    API Access                                ║${NC}"
+echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${YELLOW}Get API Token:${NC}"
+echo "  1. Login to NetBox"
+echo "  2. Click on your username (top right)"
+echo "  3. Go to 'API Tokens'"
+echo "  4. Click 'Add a token'"
+echo "  5. Generate and copy your token"
+echo ""
+echo -e "${YELLOW}Test API:${NC}"
+echo "  # List scanners"
+echo "  curl -H \"Authorization: Token YOUR_TOKEN\" \\"
+echo "       http://localhost:8000/api/plugins/auto-discovery/scanners/"
+echo ""
+echo "  # Create scanner via API"
+echo "  curl -X POST -H \"Authorization: Token YOUR_TOKEN\" \\"
+echo "       -H \"Content-Type: application/json\" \\"
+echo "       -d '{\"name\": \"API Scanner\", \"scanner_type\": \"network_range\", "
+echo "            \"status\": \"active\", \"ip_range\": \"10.0.0.0/24\"}' \\"
+echo "       http://localhost:8000/api/plugins/auto-discovery/scanners/"
+echo ""
+echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║                    Documentation                             ║${NC}"
+echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo "  README:              cat $PLUGIN_DIR/README.md"
+echo "  Deployment Guide:    cat $PLUGIN_DIR/DEPLOYMENT_GUIDE.md"
+echo "  Architecture:        cat $PLUGIN_DIR/ARCHITECTURE.md"
+echo "  Technical Details:   cat $PLUGIN_DIR/TECHNICAL_VERIFICATION.md"
+echo "  API Docs:            http://localhost:8000/api/docs/"
+echo ""
+echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${CYAN}║                    Troubleshooting                           ║${NC}"
+echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""
+echo -e "${YELLOW}If you encounter issues:${NC}"
+echo ""
+echo "  1. Check logs:"
+echo "     cd $NETBOX_DOCKER_DIR && docker compose logs -f netbox"
+echo ""
+echo "  2. Verify all containers are running:"
+echo "     cd $NETBOX_DOCKER_DIR && docker compose ps"
+echo ""
+echo "  3. Restart services:"
+echo "     cd $NETBOX_DOCKER_DIR && docker compose restart"
+echo ""
+echo "  4. Full rebuild (WARNING: destroys all data):"
+echo "     cd $NETBOX_DOCKER_DIR"
+echo "     docker compose down -v"
+echo "     cd $SCRIPT_DIR"
+echo "     ./setup-monorepo.sh"
+echo ""
+echo "  5. Check plugin installation:"
+echo "     docker compose exec netbox /opt/netbox/venv/bin/pip list | grep auto-discovery"
+echo ""
+echo "  6. Verify plugin is loaded:"
+echo "     docker compose exec netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell"
+echo "     >>> from django.conf import settings"
+echo "     >>> print(settings.PLUGINS)"
+echo ""
+echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║                    Happy Testing! 🚀                         ║${NC}"
+echo -e "${GREEN}║                                                              ║${NC}"
+echo -e "${GREEN}║  For questions: hamidzamani445@gmail.com                    ║${NC}"
+echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo ""

@@ -1,0 +1,208 @@
+{% extends 'generic/object.html' %}
+{% load buttons %}
+{% load plugins %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Scanner Information</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Name</th>
+                        <td>{{ object.name }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Type</th>
+                        <td>
+                            {% badge object.get_scanner_type_display bg_color="blue" %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Status</th>
+                        <td>
+                            {% if object.status == 'active' %}
+                                {% badge object.get_status_display bg_color="green" %}
+                            {% else %}
+                                {% badge object.get_status_display bg_color="gray" %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if object.site %}
+                    <tr>
+                        <th scope="row">Site</th>
+                        <td>{{ object.site|linkify }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if object.description %}
+                    <tr>
+                        <th scope="row">Description</th>
+                        <td>{{ object.description }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+
+        {% if object.scanner_type == 'network_range' %}
+        <div class="card">
+            <h5 class="card-header">Network Range Scan Configuration</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">CIDR Range</th>
+                        <td><code>{{ object.cidr_range }}</code></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if object.scanner_type == 'cisco_switch' %}
+        <div class="card">
+            <h5 class="card-header">Cisco Switch Scan Configuration</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Target</th>
+                        <td><code>{{ object.target_hostname }}</code></td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Protocol</th>
+                        <td>{{ object.get_connection_protocol_display }}</td>
+                    </tr>
+                    {% if object.ssh_username %}
+                    <tr>
+                        <th scope="row">SSH Username</th>
+                        <td>{{ object.ssh_username }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">SSH Port</th>
+                        <td>{{ object.ssh_port }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if object.snmp_port %}
+                    <tr>
+                        <th scope="row">SNMP Port</th>
+                        <td>{{ object.snmp_port }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Actions</h5>
+            <div class="card-body">
+                <form method="post" action="{% url 'plugins:netbox_netbox_auto_discovery_plugin:scanner_run' pk=object.pk %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary btn-lg btn-block" {% if object.status != 'active' %}disabled{% endif %}>
+                        <i class="mdi mdi-play-circle"></i> Run Scan Now
+                    </button>
+                </form>
+                {% if object.status != 'active' %}
+                <p class="text-muted small mt-2">Scanner must be active to run scans.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if object.scan_interval_hours %}
+        <div class="card">
+            <h5 class="card-header">Automation</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Scan Interval</th>
+                        <td>Every {{ object.scan_interval_hours }} hours</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <h5 class="card-header">Statistics</h5>
+            <div class="card-body">
+                <table class="table table-hover attr-table">
+                    <tr>
+                        <th scope="row">Total Scan Runs</th>
+                        <td>{{ object.scan_runs.count }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Completed</th>
+                        <td>{{ completed_runs_count }}</td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Failed</th>
+                        <td>{{ failed_runs_count }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col col-md-12">
+        <div class="card">
+            <h5 class="card-header">Recent Scan Runs</h5>
+            <div class="card-body table-responsive">
+                {% if object.scan_runs.all %}
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Status</th>
+                            <th>Started</th>
+                            <th>Completed</th>
+                            <th>Duration</th>
+                            <th>IPs</th>
+                            <th>Devices</th>
+                            <th>Interfaces</th>
+                            <th>VLANs</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for run in object.scan_runs.all|slice:":10" %}
+                        <tr>
+                            <td><a href="{% url 'plugins:netbox_netbox_auto_discovery_plugin:scanrun' pk=run.pk %}">#{{ run.pk }}</a></td>
+                            <td>
+                                {% if run.status == 'completed' %}
+                                    {% badge run.get_status_display bg_color="green" %}
+                                {% elif run.status == 'failed' %}
+                                    {% badge run.get_status_display bg_color="red" %}
+                                {% elif run.status == 'running' %}
+                                    {% badge run.get_status_display bg_color="blue" %}
+                                {% else %}
+                                    {% badge run.get_status_display bg_color="gray" %}
+                                {% endif %}
+                            </td>
+                            <td>{{ run.started_at|date:"Y-m-d H:i" }}</td>
+                            <td>{{ run.completed_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                            <td>{{ run.duration|default:"-" }}</td>
+                            <td>{{ run.ips_discovered }}</td>
+                            <td>{{ run.devices_discovered }}</td>
+                            <td>{{ run.interfaces_discovered }}</td>
+                            <td>{{ run.vlans_discovered }}</td>
+                            <td>
+                                <a href="{% url 'plugins:netbox_netbox_auto_discovery_plugin:scanrun' pk=run.pk %}" class="btn btn-sm btn-primary">
+                                    <i class="mdi mdi-eye"></i> View
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-muted">No scan runs yet. Click "Run Scan Now" to start.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,114 @@
+{% extends 'generic/object.html' %}
+{% load helpers %}
+
+{% block content %}
+<div class="row">
+    <div class="col col-md-6">
+        <div class="card">
+            <h5 class="card-header">Scan Run Details</h5>
+            <table class="table table-hover attr-table">
+                <tr>
+                    <th scope="row">Scanner</th>
+                    <td><a href="{{ object.scanner.get_absolute_url }}">{{ object.scanner }}</a></td>
+                </tr>
+                <tr>
+                    <th scope="row">Status</th>
+                    <td>{% badge object.get_status_display bg_color=object.get_status_color %}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Started</th>
+                    <td>{{ object.started_at|default:"—" }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Completed</th>
+                    <td>{{ object.completed_at|default:"—" }}</td>
+                </tr>
+                {% if object.duration %}
+                <tr>
+                    <th scope="row">Duration</th>
+                    <td>{{ object.duration }}</td>
+                </tr>
+                {% endif %}
+                {% if object.job_id %}
+                <tr>
+                    <th scope="row">Job ID</th>
+                    <td><code>{{ object.job_id }}</code></td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+
+        <div class="card">
+            <h5 class="card-header">Discovery Summary</h5>
+            <table class="table table-hover attr-table">
+                <tr>
+                    <th scope="row">IP Addresses</th>
+                    <td>{{ object.ips_discovered }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Devices</th>
+                    <td>{{ object.devices_discovered }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Interfaces</th>
+                    <td>{{ object.interfaces_discovered }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">VLANs</th>
+                    <td>{{ object.vlans_discovered }}</td>
+                </tr>
+            </table>
+        </div>
+
+        {% if object.error_message %}
+        <div class="card border-danger">
+            <h5 class="card-header bg-danger text-white">Error Message</h5>
+            <div class="card-body">
+                <pre class="text-danger">{{ object.error_message }}</pre>
+            </div>
+        </div>
+        {% endif %}
+
+        {% include 'inc/panels/custom_fields.html' %}
+    </div>
+    <div class="col col-md-6">
+        {% include 'inc/panels/tags.html' %}
+        {% include 'inc/panels/comments.html' %}
+
+        {% if object.log_output %}
+        <div class="card">
+            <h5 class="card-header">Log Output</h5>
+            <div class="card-body">
+                <pre style="max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px;">{{ object.log_output }}</pre>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <h5 class="card-header">Discovered Resources</h5>
+            <div class="card-body">
+                {% if object.discovered_devices.exists or object.discovered_ips.exists %}
+                <ul class="list-unstyled">
+                    {% if object.discovered_devices.exists %}
+                    <li>
+                        <a href="{% url 'plugins:netbox_netbox_auto_discovery_plugin:discovereddevice_list' %}?scan_run_id={{ object.pk }}">
+                            <i class="mdi mdi-server"></i> {{ object.discovered_devices.count }} Device{{ object.discovered_devices.count|pluralize }}
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if object.discovered_ips.exists %}
+                    <li>
+                        <a href="{% url 'plugins:netbox_netbox_auto_discovery_plugin:discoveredipaddress_list' %}?scan_run_id={{ object.pk }}">
+                            <i class="mdi mdi-ip"></i> {{ object.discovered_ips.count }} IP Address{{ object.discovered_ips.count|pluralize:"es" }}
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+                {% else %}
+                <p class="text-muted">No resources discovered.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
