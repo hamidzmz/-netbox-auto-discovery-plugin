@@ -147,14 +147,15 @@ print_status "Starting NetBox services..."
 print_info "Starting: PostgreSQL, Redis, Redis-Cache, NetBox, NetBox-Worker"
 echo ""
 
-docker compose up -d
+# Start base services first (postgres, redis)
+docker compose up -d postgres redis redis-cache
 
 if [ $? -ne 0 ]; then
-    print_error "Failed to start services"
+    print_error "Failed to start base services"
     exit 1
 fi
 
-print_success "Services started"
+print_info "Base services (PostgreSQL, Redis) started, waiting for health checks..."
 echo ""
 
 # Wait for PostgreSQL to be ready
@@ -180,13 +181,87 @@ echo ""
 
 # Wait for Redis to be ready
 print_status "Waiting for Redis to be ready..."
-sleep 5
+attempt=0
+max_attempts=30
+
+while ! docker compose exec -T redis redis-cli -a "${REDIS_PASSWORD:-H733kdjudDq4kt44Dfwt4}" ping > /dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    if [ $attempt -ge $max_attempts ]; then
+        print_error "Redis failed to start after $max_attempts attempts"
+        exit 1
+    fi
+    echo -n "."
+    sleep 1
+done
+
+echo ""
 print_success "Redis is ready"
 echo ""
 
-# Wait for NetBox to initialize
-print_status "Waiting for NetBox to initialize..."
-sleep 20
+# Now start NetBox service
+print_status "Starting NetBox application..."
+docker compose up -d netbox
+
+if [ $? -ne 0 ]; then
+    print_error "Failed to start NetBox"
+    exit 1
+fi
+
+print_info "NetBox container started, waiting for application to be ready..."
+echo ""
+
+# Wait for NetBox to initialize and become healthy
+print_status "Waiting for NetBox to become healthy (this may take up to 2 minutes)..."
+attempt=0
+max_attempts=120  # 2 minutes with 1 second intervals
+
+while true; do
+    # Check if container is still running
+    if ! docker compose ps netbox | grep -q "Up"; then
+        print_error "NetBox container stopped unexpectedly"
+        echo ""
+        print_info "Check logs with: cd $NETBOX_DOCKER_DIR && docker compose logs netbox"
+        exit 1
+    fi
+
+    # Check if health check passes
+    if docker compose exec -T netbox curl -f http://localhost:8080/login/ > /dev/null 2>&1; then
+        break
+    fi
+
+    attempt=$((attempt + 1))
+    if [ $attempt -ge $max_attempts ]; then
+        print_error "NetBox failed to become healthy after $max_attempts attempts"
+        echo ""
+        print_info "Check logs with: cd $NETBOX_DOCKER_DIR && docker compose logs netbox"
+        exit 1
+    fi
+
+    # Show progress every 10 seconds
+    if [ $((attempt % 10)) -eq 0 ]; then
+        echo -n " ${attempt}s"
+    else
+        echo -n "."
+    fi
+
+    sleep 1
+done
+
+echo ""
+print_success "NetBox is healthy and ready"
+echo ""
+
+# Now start the worker
+print_status "Starting NetBox worker..."
+docker compose up -d netbox-worker
+
+if [ $? -ne 0 ]; then
+    print_error "Failed to start NetBox worker"
+    exit 1
+fi
+
+print_success "All services started successfully"
+echo ""
 
 # Run core NetBox migrations
 print_status "Running NetBox core migrations..."
