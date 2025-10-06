@@ -216,20 +216,18 @@ if [ $? -ne 0 ]; then
 fi
 
 print_info "NetBox container started, waiting for it to become healthy..."
-print_info "This includes running all database migrations (may take several minutes on first run)"
+print_info "This includes running all database migrations (may take 3-5 minutes on first run)"
 echo ""
 
-# Wait for Docker's health check to pass - NO FIXED TIMEOUT
-# We monitor for actual progress instead
-print_status "Monitoring NetBox startup (will wait as long as progress is being made)..."
+# Wait for Docker's health check to pass (up to 5 minutes)
+# The docker-compose.override.yml extends healthcheck start_period to 300s
+print_status "Waiting for NetBox healthcheck to pass (timeout: 5 minutes)..."
 echo ""
 
 attempt=0
-last_log_line=""
-no_progress_count=0
-max_no_progress=8  # 8 checks with no progress = 2 minutes of inactivity = likely stuck
+max_attempts=20  # 20 attempts * 15 seconds = 5 minutes total
 
-while true; do
+while [ $attempt -lt $max_attempts ]; do
     # Check container health status
     if [ "$USE_JQ" = true ]; then
         health_status=$(docker compose ps netbox --format json 2>/dev/null | jq -r '.[0].Health // "unknown"' 2>/dev/null || echo "unknown")
@@ -272,43 +270,35 @@ while true; do
         exit 1
     fi
 
-    # Monitor for progress by checking if new log lines are appearing
-    current_log_line=$(docker compose logs netbox --tail 1 2>/dev/null | tail -1)
-
-    if [ "$current_log_line" != "$last_log_line" ]; then
-        # Progress detected! Reset the no-progress counter
-        no_progress_count=0
-        last_log_line="$current_log_line"
-
-        # Show what's happening (helpful during long migrations)
-        if [ $((attempt % 4)) -eq 0 ]; then
-            echo -n " [$(date +%H:%M:%S)]"
-        else
-            echo -n "."
-        fi
+    # Show progress indicator
+    elapsed=$((attempt * 15))
+    if [ $((attempt % 4)) -eq 0 ]; then
+        echo -n " [${elapsed}s]"
     else
-        # No new logs - might be stuck
-        no_progress_count=$((no_progress_count + 1))
-        echo -n "?"
-
-        if [ $no_progress_count -ge $max_no_progress ]; then
-            echo ""
-            print_error "NetBox appears to be stuck (no log activity for 2 minutes)"
-            echo ""
-            print_info "Last log line was:"
-            echo "  $current_log_line"
-            echo ""
-            print_info "Showing last 50 lines of logs:"
-            docker compose logs netbox --tail 50
-            echo ""
-            print_info "Container might be waiting for user input or encountered an error"
-            exit 1
-        fi
+        echo -n "."
     fi
 
     attempt=$((attempt + 1))
     sleep 15
 done
+
+# Check if we timed out
+if [ $attempt -ge $max_attempts ]; then
+    echo ""
+    print_error "NetBox failed to become healthy after 5 minutes"
+    echo ""
+    print_info "This might indicate:"
+    echo "  - Migrations are taking longer than expected"
+    echo "  - Database connection issues"
+    echo "  - Plugin installation problems"
+    echo ""
+    print_info "Showing last 50 lines of logs:"
+    docker compose logs netbox --tail 50
+    echo ""
+    print_info "You can check the full logs with:"
+    echo "  cd $NETBOX_DOCKER_DIR && docker compose logs -f netbox"
+    exit 1
+fi
 
 echo ""# Now start the worker
 print_status "Starting NetBox worker..."
