@@ -1,5 +1,3 @@
-"""Top-level package for NetBox Auto Discovery Plugin."""
-
 __author__ = """Hamid Zamani"""
 __email__ = "hamidzamani445@gmail.com"
 __version__ = "0.1.0"

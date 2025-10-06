@@ -1,5 +1,3 @@
-"""Django Tables2 table definitions for Auto Discovery Plugin."""
-
 import django_tables2 as tables
 from netbox.tables import NetBoxTable, ChoiceFieldColumn
 from django_tables2.utils import Accessor
@@ -8,7 +6,6 @@ from .models import Scanner, ScanRun, DiscoveredDevice, DiscoveredIPAddress
 
 
 class ScannerTable(NetBoxTable):
-    """Table for displaying Scanner objects."""
 
     name = tables.Column(
         linkify=True,
@@ -43,7 +40,6 @@ class ScannerTable(NetBoxTable):
 
 
 class ScanRunTable(NetBoxTable):
-    """Table for displaying ScanRun objects."""
 
     scanner = tables.Column(
         linkify=True,
@@ -81,7 +77,6 @@ class ScanRunTable(NetBoxTable):
 
 
 class DiscoveredDeviceTable(NetBoxTable):
-    """Table for displaying DiscoveredDevice objects."""
 
     scan_run = tables.Column(
         linkify=True,
@@ -108,7 +103,6 @@ class DiscoveredDeviceTable(NetBoxTable):
 
 
 class DiscoveredIPAddressTable(NetBoxTable):
-    """Table for displaying DiscoveredIPAddress objects."""
 
     scan_run = tables.Column(
         linkify=True,

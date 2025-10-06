@@ -1,5 +1,3 @@
-"""Data models for NetBox Auto Discovery Plugin."""
-
 from django.contrib.postgres.fields import ArrayField
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
@@ -15,10 +13,6 @@ from .choices import (
 
 
 class Scanner(NetBoxModel):
-    """
-    Represents a network scanner configuration.
-    Supports Network Range scans (CIDR-based IP discovery) and Cisco Switch scans (SSH/SNMP device polling).
-    """
 
     name = models.CharField(
         max_length=100,
@@ -44,14 +38,12 @@ class Scanner(NetBoxModel):
         help_text="Optional description for this scanner"
     )
 
-    # Network Range Scan fields
     cidr_range = models.CharField(
         max_length=100,
         blank=True,
         help_text="CIDR notation for network range scan (e.g., 192.168.1.0/24)"
     )
 
-    # Cisco Switch Scan fields
     target_hostname = models.CharField(
         max_length=255,
         blank=True,
@@ -65,7 +57,6 @@ class Scanner(NetBoxModel):
         help_text="Protocol to use for device connection"
     )
 
-    # SSH credentials (encrypted via NetBox secrets mechanism)
     ssh_username = models.CharField(
         max_length=100,
         blank=True,
@@ -84,7 +75,6 @@ class Scanner(NetBoxModel):
         help_text="SSH port number"
     )
 
-    # SNMP credentials
     snmp_community = models.CharField(
         max_length=100,
         blank=True,
@@ -97,7 +87,6 @@ class Scanner(NetBoxModel):
         help_text="SNMP port number"
     )
 
-    # SNMPv3 fields
     snmp_v3_username = models.CharField(
         max_length=100,
         blank=True,
@@ -128,7 +117,6 @@ class Scanner(NetBoxModel):
         help_text="SNMPv3 privacy key"
     )
 
-    # Additional options
     scan_interval_hours = models.PositiveIntegerField(
         blank=True,
         null=True,
@@ -157,10 +145,6 @@ class Scanner(NetBoxModel):
 
 
 class ScanRun(NetBoxModel):
-    """
-    Represents a single execution of a scanner.
-    Tracks status, timing, and summary metrics for each scan run.
-    """
 
     scanner = models.ForeignKey(
         to='Scanner',
@@ -188,7 +172,6 @@ class ScanRun(NetBoxModel):
         help_text="Timestamp when the scan completed"
     )
 
-    # Summary metrics
     ips_discovered = models.PositiveIntegerField(
         default=0,
         help_text="Number of IP addresses discovered"
@@ -209,7 +192,6 @@ class ScanRun(NetBoxModel):
         help_text="Number of VLANs discovered"
     )
 
-    # Logs and errors
     log_output = models.TextField(
         blank=True,
         help_text="Detailed log output from the scan"
@@ -239,17 +221,12 @@ class ScanRun(NetBoxModel):
 
     @property
     def duration(self):
-        """Calculate scan duration if both timestamps are available."""
         if self.started_at and self.completed_at:
             return self.completed_at - self.started_at
         return None
 
 
 class DiscoveredDevice(NetBoxModel):
-    """
-    Audit record linking a ScanRun to a created/updated NetBox Device.
-    Enables tracking which scans contributed to device inventory.
-    """
 
     scan_run = models.ForeignKey(
         to='ScanRun',
@@ -293,10 +270,6 @@ class DiscoveredDevice(NetBoxModel):
 
 
 class DiscoveredIPAddress(NetBoxModel):
-    """
-    Audit record linking a ScanRun to a created/updated NetBox IPAddress.
-    Enables tracking which scans contributed to IP address inventory.
-    """
 
     scan_run = models.ForeignKey(
         to='ScanRun',

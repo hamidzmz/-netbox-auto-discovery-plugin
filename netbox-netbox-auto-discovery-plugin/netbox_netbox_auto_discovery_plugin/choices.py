@@ -1,10 +1,7 @@
-"""Choice sets for NetBox Auto Discovery Plugin."""
-
 from utilities.choices import ChoiceSet
 
 
 class ScannerTypeChoices(ChoiceSet):
-    """Scanner type options."""
 
     TYPE_NETWORK_RANGE = 'network_range'
     TYPE_CISCO_SWITCH = 'cisco_switch'
@@ -16,7 +13,6 @@ class ScannerTypeChoices(ChoiceSet):
 
 
 class ScannerStatusChoices(ChoiceSet):
-    """Scanner status options."""
 
     STATUS_ACTIVE = 'active'
     STATUS_DISABLED = 'disabled'
@@ -28,7 +24,6 @@ class ScannerStatusChoices(ChoiceSet):
 
 
 class ScanRunStatusChoices(ChoiceSet):
-    """Scan run status options."""
 
     STATUS_PENDING = 'pending'
     STATUS_RUNNING = 'running'
@@ -46,7 +41,6 @@ class ScanRunStatusChoices(ChoiceSet):
 
 
 class ConnectionProtocolChoices(ChoiceSet):
-    """Connection protocol options for device scanning."""
 
     PROTOCOL_SSH = 'ssh'
     PROTOCOL_SNMP_V2C = 'snmp_v2c'

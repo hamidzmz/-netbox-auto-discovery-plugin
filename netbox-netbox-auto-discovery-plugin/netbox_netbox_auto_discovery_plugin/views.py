@@ -1,5 +1,3 @@
-"""Django views for Auto Discovery Plugin."""
-
 from django.contrib import messages
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -14,17 +12,11 @@ from .jobs import NetworkRangeScanJob, CiscoSwitchScanJob
 from .choices import ScannerTypeChoices
 
 
-#
-# Scanner views
-#
-
 class ScannerView(generic.ObjectView):
-    """Detail view for a Scanner."""
     queryset = models.Scanner.objects.all()
     template_name = 'netbox_netbox_auto_discovery_plugin/scanner_detail.html'
 
     def get_extra_context(self, request, instance):
-        """Add computed statistics to template context."""
         from .choices import ScanRunStatusChoices
         context = super().get_extra_context(request, instance)
         context['completed_runs_count'] = instance.scan_runs.filter(
@@ -37,7 +29,6 @@ class ScannerView(generic.ObjectView):
 
 
 class ScannerListView(generic.ObjectListView):
-    """List view for Scanners."""
     queryset = models.Scanner.objects.annotate(
         scan_runs_count=Count('scan_runs')
     )
@@ -47,24 +38,20 @@ class ScannerListView(generic.ObjectListView):
 
 
 class ScannerEditView(generic.ObjectEditView):
-    """Edit view for a Scanner."""
     queryset = models.Scanner.objects.all()
     form = forms.ScannerForm
 
 
 class ScannerDeleteView(generic.ObjectDeleteView):
-    """Delete view for a Scanner."""
     queryset = models.Scanner.objects.all()
 
 
 class ScannerBulkImportView(generic.BulkImportView):
-    """Bulk import view for Scanners."""
     queryset = models.Scanner.objects.all()
     model_form = forms.ScannerForm
 
 
 class ScannerBulkEditView(generic.BulkEditView):
-    """Bulk edit view for Scanners."""
     queryset = models.Scanner.objects.all()
     filterset = filtersets.ScannerFilterSet
     table = tables.ScannerTable
@@ -72,17 +59,14 @@ class ScannerBulkEditView(generic.BulkEditView):
 
 
 class ScannerBulkDeleteView(generic.BulkDeleteView):
-    """Bulk delete view for Scanners."""
     queryset = models.Scanner.objects.all()
     filterset = filtersets.ScannerFilterSet
     table = tables.ScannerTable
 
 
 class ScannerRunView(View):
-    """View to execute a scanner (enqueue background job)."""
 
     def post(self, request, pk):
-        """Handle POST request to run a scan."""
         scanner = get_object_or_404(models.Scanner, pk=pk)
 
         try:
@@ -115,18 +99,12 @@ class ScannerRunView(View):
         return redirect('plugins:netbox_netbox_auto_discovery_plugin:scanner', pk=pk)
 
 
-#
-# ScanRun views
-#
-
 class ScanRunView(generic.ObjectView):
-    """Detail view for a ScanRun."""
     queryset = models.ScanRun.objects.select_related('scanner')
     template_name = 'netbox_netbox_auto_discovery_plugin/scanrun_detail.html'
 
 
 class ScanRunListView(generic.ObjectListView):
-    """List view for ScanRuns."""
     queryset = models.ScanRun.objects.select_related('scanner')
     table = tables.ScanRunTable
     filterset = filtersets.ScanRunFilterSet
@@ -134,39 +112,30 @@ class ScanRunListView(generic.ObjectListView):
 
 
 class ScanRunEditView(generic.ObjectEditView):
-    """Edit view for a ScanRun (limited fields)."""
     queryset = models.ScanRun.objects.all()
     form = forms.ScanRunForm
 
 
 class ScanRunDeleteView(generic.ObjectDeleteView):
-    """Delete view for a ScanRun."""
     queryset = models.ScanRun.objects.all()
 
 
 class ScanRunBulkDeleteView(generic.BulkDeleteView):
-    """Bulk delete view for ScanRuns."""
     queryset = models.ScanRun.objects.all()
     filterset = filtersets.ScanRunFilterSet
     table = tables.ScanRunTable
 
 
-#
-# DiscoveredDevice views
-#
-
 class DiscoveredDeviceView(generic.ObjectView):
-    """Detail view for a DiscoveredDevice."""
     queryset = models.DiscoveredDevice.objects.select_related('scan_run', 'device')
 
     def get_extra_context(self, request, instance):
         return {
-            'actions': ['delete']  # Exclude edit action for audit records
+            'actions': ['delete']
         }
 
 
 class DiscoveredDeviceListView(generic.ObjectListView):
-    """List view for DiscoveredDevices."""
     queryset = models.DiscoveredDevice.objects.select_related('scan_run', 'device')
     table = tables.DiscoveredDeviceTable
     filterset = filtersets.DiscoveredDeviceFilterSet
@@ -174,38 +143,29 @@ class DiscoveredDeviceListView(generic.ObjectListView):
 
 
 class DiscoveredDeviceEditView(generic.ObjectEditView):
-    """Edit view for a DiscoveredDevice (read-only audit records)."""
     queryset = models.DiscoveredDevice.objects.all()
     form = forms.DiscoveredDeviceForm
 
 
 class DiscoveredDeviceDeleteView(generic.ObjectDeleteView):
-    """Delete view for a DiscoveredDevice."""
     queryset = models.DiscoveredDevice.objects.all()
 
 
 class DiscoveredDeviceBulkDeleteView(generic.BulkDeleteView):
-    """Bulk delete view for DiscoveredDevices."""
     queryset = models.DiscoveredDevice.objects.all()
     table = tables.DiscoveredDeviceTable
 
 
-#
-# DiscoveredIPAddress views
-#
-
 class DiscoveredIPAddressView(generic.ObjectView):
-    """Detail view for a DiscoveredIPAddress."""
     queryset = models.DiscoveredIPAddress.objects.select_related('scan_run', 'ip_address')
 
     def get_extra_context(self, request, instance):
         return {
-            'actions': ['delete']  # Exclude edit action for audit records
+            'actions': ['delete']
         }
 
 
 class DiscoveredIPAddressListView(generic.ObjectListView):
-    """List view for DiscoveredIPAddresses."""
     queryset = models.DiscoveredIPAddress.objects.select_related('scan_run', 'ip_address')
     table = tables.DiscoveredIPAddressTable
     filterset = filtersets.DiscoveredIPAddressFilterSet
@@ -213,17 +173,14 @@ class DiscoveredIPAddressListView(generic.ObjectListView):
 
 
 class DiscoveredIPAddressEditView(generic.ObjectEditView):
-    """Edit view for a DiscoveredIPAddress (read-only audit records)."""
     queryset = models.DiscoveredIPAddress.objects.all()
     form = forms.DiscoveredIPAddressForm
 
 
 class DiscoveredIPAddressDeleteView(generic.ObjectDeleteView):
-    """Delete view for a DiscoveredIPAddress."""
     queryset = models.DiscoveredIPAddress.objects.all()
 
 
 class DiscoveredIPAddressBulkDeleteView(generic.BulkDeleteView):
-    """Bulk delete view for DiscoveredIPAddresses."""
     queryset = models.DiscoveredIPAddress.objects.all()
     table = tables.DiscoveredIPAddressTable

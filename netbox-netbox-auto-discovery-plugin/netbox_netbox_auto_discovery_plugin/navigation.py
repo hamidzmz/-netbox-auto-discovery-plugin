@@ -1,9 +1,6 @@
-"""Navigation menu configuration for Auto Discovery Plugin."""
-
 from netbox.plugins import PluginMenuButton, PluginMenuItem, PluginMenu
 
 
-# Scanner menu item with action buttons
 scanner_buttons = [
     PluginMenuButton(
         link='plugins:netbox_netbox_auto_discovery_plugin:scanner_add',
@@ -19,7 +16,6 @@ scanner_buttons = [
     ),
 ]
 
-# Scan run menu item
 scanrun_buttons = [
     PluginMenuButton(
         link='plugins:netbox_netbox_auto_discovery_plugin:scanrun_list',
@@ -29,7 +25,6 @@ scanrun_buttons = [
     ),
 ]
 
-# Build the full menu
 menu = PluginMenu(
     label='Auto Discovery',
     groups=(

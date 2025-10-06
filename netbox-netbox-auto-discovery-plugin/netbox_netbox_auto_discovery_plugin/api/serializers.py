@@ -1,5 +1,3 @@
-"""API serializers for Auto Discovery Plugin."""
-
 from rest_framework import serializers
 from netbox.api.serializers import NetBoxModelSerializer
 from dcim.api.serializers import SiteSerializer
@@ -13,7 +11,6 @@ from netbox_netbox_auto_discovery_plugin.models import (
 
 
 class ScannerSerializer(NetBoxModelSerializer):
-    """Serializer for Scanner model."""
 
     url = serializers.HyperlinkedIdentityField(
         view_name='plugins-api:netbox_netbox_auto_discovery_plugin-api:scanner-detail'
@@ -32,7 +29,6 @@ class ScannerSerializer(NetBoxModelSerializer):
 
 
 class ScanRunSerializer(NetBoxModelSerializer):
-    """Serializer for ScanRun model."""
 
     url = serializers.HyperlinkedIdentityField(
         view_name='plugins-api:netbox_netbox_auto_discovery_plugin-api:scanrun-detail'
@@ -51,7 +47,6 @@ class ScanRunSerializer(NetBoxModelSerializer):
 
 
 class DiscoveredDeviceSerializer(NetBoxModelSerializer):
-    """Serializer for DiscoveredDevice model."""
 
     url = serializers.HyperlinkedIdentityField(
         view_name='plugins-api:netbox_netbox_auto_discovery_plugin-api:discovereddevice-detail'
@@ -68,7 +63,6 @@ class DiscoveredDeviceSerializer(NetBoxModelSerializer):
 
 
 class DiscoveredIPAddressSerializer(NetBoxModelSerializer):
-    """Serializer for DiscoveredIPAddress model."""
 
     url = serializers.HyperlinkedIdentityField(
         view_name='plugins-api:netbox_netbox_auto_discovery_plugin-api:discoveredipaddress-detail'

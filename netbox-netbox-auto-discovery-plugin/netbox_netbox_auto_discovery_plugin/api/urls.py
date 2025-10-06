@@ -1,5 +1,3 @@
-"""API URLs for Auto Discovery Plugin."""
-
 from netbox.api.routers import NetBoxRouter
 from . import views
 

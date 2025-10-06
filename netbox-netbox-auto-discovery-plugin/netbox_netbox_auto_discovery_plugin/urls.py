@@ -1,5 +1,3 @@
-"""URL patterns for Auto Discovery Plugin."""
-
 from django.urls import path
 from netbox.views.generic import ObjectChangeLogView
 
@@ -7,7 +5,6 @@ from . import models, views
 
 
 urlpatterns = (
-    # Scanner URLs
     path('scanners/', views.ScannerListView.as_view(), name='scanner_list'),
     path('scanners/add/', views.ScannerEditView.as_view(), name='scanner_add'),
     path('scanners/import/', views.ScannerBulkImportView.as_view(), name='scanner_import'),
@@ -24,7 +21,6 @@ urlpatterns = (
         kwargs={'model': models.Scanner},
     ),
 
-    # ScanRun URLs
     path('scan-runs/', views.ScanRunListView.as_view(), name='scanrun_list'),
     path('scan-runs/add/', views.ScanRunEditView.as_view(), name='scanrun_add'),
     path('scan-runs/delete/', views.ScanRunBulkDeleteView.as_view(), name='scanrun_bulk_delete'),
@@ -38,7 +34,6 @@ urlpatterns = (
         kwargs={'model': models.ScanRun},
     ),
 
-    # DiscoveredDevice URLs
     path('discovered-devices/', views.DiscoveredDeviceListView.as_view(), name='discovereddevice_list'),
     path('discovered-devices/delete/', views.DiscoveredDeviceBulkDeleteView.as_view(), name='discovereddevice_bulk_delete'),
     path('discovered-devices/<int:pk>/', views.DiscoveredDeviceView.as_view(), name='discovereddevice'),
@@ -51,7 +46,6 @@ urlpatterns = (
         kwargs={'model': models.DiscoveredDevice},
     ),
 
-    # DiscoveredIPAddress URLs
     path('discovered-ips/', views.DiscoveredIPAddressListView.as_view(), name='discoveredipaddress_list'),
     path('discovered-ips/delete/', views.DiscoveredIPAddressBulkDeleteView.as_view(), name='discoveredipaddress_bulk_delete'),
     path('discovered-ips/<int:pk>/', views.DiscoveredIPAddressView.as_view(), name='discoveredipaddress'),

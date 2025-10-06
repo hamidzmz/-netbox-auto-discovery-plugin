@@ -1,5 +1,3 @@
-"""Django filtersets for Auto Discovery Plugin."""
-
 import django_filters
 from netbox.filtersets import NetBoxModelFilterSet
 from dcim.models import Site
@@ -9,7 +7,6 @@ from .models import Scanner, ScanRun, DiscoveredDevice, DiscoveredIPAddress
 
 
 class ScannerFilterSet(NetBoxModelFilterSet):
-    """FilterSet for Scanner model."""
 
     scanner_type = django_filters.MultipleChoiceFilter(
         choices=ScannerTypeChoices,
@@ -31,7 +28,6 @@ class ScannerFilterSet(NetBoxModelFilterSet):
         fields = ['id', 'name', 'scanner_type', 'status', 'site']
 
     def search(self, queryset, name, value):
-        """Custom search across multiple fields."""
         return queryset.filter(
             django_filters.Q(name__icontains=value) |
             django_filters.Q(description__icontains=value) |
@@ -41,7 +37,6 @@ class ScannerFilterSet(NetBoxModelFilterSet):
 
 
 class ScanRunFilterSet(NetBoxModelFilterSet):
-    """FilterSet for ScanRun model."""
 
     status = django_filters.MultipleChoiceFilter(
         choices=ScanRunStatusChoices,
@@ -58,7 +53,6 @@ class ScanRunFilterSet(NetBoxModelFilterSet):
         fields = ['id', 'scanner', 'status']
 
     def search(self, queryset, name, value):
-        """Custom search across scanner name and log output."""
         return queryset.filter(
             django_filters.Q(scanner__name__icontains=value) |
             django_filters.Q(log_output__icontains=value) |
@@ -67,7 +61,6 @@ class ScanRunFilterSet(NetBoxModelFilterSet):
 
 
 class DiscoveredDeviceFilterSet(NetBoxModelFilterSet):
-    """FilterSet for DiscoveredDevice model."""
 
     action = django_filters.ChoiceFilter(
         choices=[('created', 'Created'), ('updated', 'Updated')]
@@ -83,14 +76,12 @@ class DiscoveredDeviceFilterSet(NetBoxModelFilterSet):
         fields = ['id', 'scan_run', 'device', 'action']
 
     def search(self, queryset, name, value):
-        """Custom search across device name."""
         return queryset.filter(
             django_filters.Q(device__name__icontains=value)
         )
 
 
 class DiscoveredIPAddressFilterSet(NetBoxModelFilterSet):
-    """FilterSet for DiscoveredIPAddress model."""
 
     action = django_filters.ChoiceFilter(
         choices=[('created', 'Created'), ('updated', 'Updated')]
@@ -106,7 +97,6 @@ class DiscoveredIPAddressFilterSet(NetBoxModelFilterSet):
         fields = ['id', 'scan_run', 'ip_address', 'action', 'hostname']
 
     def search(self, queryset, name, value):
-        """Custom search across IP address and hostname."""
         return queryset.filter(
             django_filters.Q(ip_address__address__icontains=value) |
             django_filters.Q(hostname__icontains=value)

@@ -1,5 +1,3 @@
-"""Django forms for Auto Discovery Plugin."""
-
 from django import forms
 from dcim.models import Site
 from netbox.forms import NetBoxModelForm, NetBoxModelFilterSetForm, NetBoxModelBulkEditForm
@@ -20,7 +18,6 @@ from .models import Scanner, ScanRun, DiscoveredDevice, DiscoveredIPAddress
 
 
 class ScannerForm(NetBoxModelForm):
-    """Form for creating/editing Scanner objects."""
 
     site = DynamicModelChoiceField(
         queryset=Site.objects.all(),
@@ -74,7 +71,6 @@ class ScannerForm(NetBoxModelForm):
 
 
 class ScannerFilterForm(NetBoxModelFilterSetForm):
-    """Filter form for Scanner list view."""
 
     model = Scanner
 
@@ -100,7 +96,6 @@ class ScannerFilterForm(NetBoxModelFilterSetForm):
 
 
 class ScannerBulkEditForm(NetBoxModelBulkEditForm):
-    """Bulk edit form for Scanner objects."""
 
     model = Scanner
 
@@ -123,18 +118,15 @@ class ScannerBulkEditForm(NetBoxModelBulkEditForm):
 
 
 class ScanRunForm(NetBoxModelForm):
-    """Form for creating/editing ScanRun objects (mostly read-only, created by jobs)."""
 
     comments = CommentField()
 
     class Meta:
         model = ScanRun
         fields = ('scanner', 'status', 'comments', 'tags')
-        # Most fields are auto-populated by the scan job
 
 
 class ScanRunFilterForm(NetBoxModelFilterSetForm):
-    """Filter form for ScanRun list view."""
 
     model = ScanRun
 
@@ -148,36 +140,30 @@ class ScanRunFilterForm(NetBoxModelFilterSetForm):
 
 
 class DiscoveredDeviceFilterForm(NetBoxModelFilterSetForm):
-    """Filter form for DiscoveredDevice list view."""
 
     model = DiscoveredDevice
     tag = TagFilterField(model)
 
 
 class DiscoveredIPAddressFilterForm(NetBoxModelFilterSetForm):
-    """Filter form for DiscoveredIPAddress list view."""
 
     model = DiscoveredIPAddress
     tag = TagFilterField(model)
 
 
 class DiscoveredDeviceForm(NetBoxModelForm):
-    """Form for editing DiscoveredDevice objects (audit records)."""
 
     comments = CommentField()
 
     class Meta:
         model = DiscoveredDevice
         fields = ('scan_run', 'device', 'action', 'discovered_data', 'comments', 'tags')
-        # Note: These are audit records, typically not edited manually
 
 
 class DiscoveredIPAddressForm(NetBoxModelForm):
-    """Form for editing DiscoveredIPAddress objects (audit records)."""
 
     comments = CommentField()
 
     class Meta:
         model = DiscoveredIPAddress
         fields = ('scan_run', 'ip_address', 'action', 'hostname', 'open_ports', 'services', 'comments', 'tags')
-        # Note: These are audit records, typically not edited manually

@@ -1,5 +1,3 @@
-"""Background jobs for Auto Discovery Plugin."""
-
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -22,20 +20,15 @@ logger = logging.getLogger('netbox.plugins.auto_discovery')
 
 
 class NetworkRangeScanJob(JobRunner):
-    """
-    Background job to scan a network range and discover active IPs and services.
-    Creates/updates IPAddress objects in NetBox IPAM.
-    """
 
     class Meta:
         name = "Network Range Scan"
 
     def run(self, scanner_id: int) -> Dict[str, Any]:
-        """Execute the network range scan."""
 
         scanner = Scanner.objects.get(pk=scanner_id)
 
-        # Create ScanRun record
+
         scan_run = ScanRun.objects.create(
             scanner=scanner,
             status=ScanRunStatusChoices.STATUS_RUNNING,
@@ -48,17 +41,14 @@ class NetworkRangeScanJob(JobRunner):
             log_lines.append(f"Starting network range scan for {scanner.cidr_range}")
             self.logger.info(f"Scanning range: {scanner.cidr_range}")
 
-            # Initialize nmap scanner
+
             nm = nmap.PortScanner()
 
-                        # Perform nmap scan
             log_lines.append(f"Performing host discovery scan...")
             nm.scan(hosts=scanner.cidr_range, arguments='-sn -T4')
 
             ips_discovered = 0
 
-            # Save the list of discovered hosts and their hostnames before doing service scans
-            # (service scans will overwrite the nm object)
             discovered_hosts = []
             for host in nm.all_hosts():
                 hostname = ''
@@ -68,7 +58,6 @@ class NetworkRangeScanJob(JobRunner):
 
             log_lines.append(f"Found {len(discovered_hosts)} host(s) in range")
 
-            # Process each discovered host
             for host, hostname in discovered_hosts:
                 log_lines.append(f"Found active host: {host}")
                 self.logger.info(f"Processing host: {host}")
@@ -76,15 +65,12 @@ class NetworkRangeScanJob(JobRunner):
                 if hostname:
                     log_lines.append(f"  Hostname: {hostname}")
 
-                # Perform service scan on active host
                 log_lines.append(f"  Scanning services on {host}...")
                 nm.scan(hosts=host, arguments='-sV -p 22,23,80,443,161,8080')
 
-                # Collect open ports and services
                 open_ports = []
                 services = {}
 
-                # Check if host exists in scan results after service scan
                 if host in nm.all_hosts() and 'tcp' in nm[host]:
                     for port, port_info in nm[host]['tcp'].items():
                         if port_info['state'] == 'open':
@@ -96,7 +82,6 @@ class NetworkRangeScanJob(JobRunner):
                             }
                             log_lines.append(f"    Port {port}: {port_info.get('name', 'unknown')}")
 
-                # Create or update IPAddress in NetBox
                 with transaction.atomic():
                     ip_address, created = IPAddress.objects.get_or_create(
                         address=f"{host}/32",
@@ -108,19 +93,16 @@ class NetworkRangeScanJob(JobRunner):
                     )
 
                     if not created:
-                        # Update existing IP
                         ip_address.status = 'active'
                         if hostname:
                             ip_address.dns_name = hostname
                         ip_address.description = f'Last seen by Auto Discovery on {scan_run.started_at.strftime("%Y-%m-%d %H:%M")}'
                         ip_address.save()
 
-                    # Associate with site if specified
                     if scanner.site:
                         ip_address.site = scanner.site
                         ip_address.save()
 
-                    # Create discovery record
                     DiscoveredIPAddress.objects.create(
                         scan_run=scan_run,
                         ip_address=ip_address,
@@ -133,7 +115,6 @@ class NetworkRangeScanJob(JobRunner):
                     ips_discovered += 1
                     log_lines.append(f"  {'Created' if created else 'Updated'} IP address record in NetBox")
 
-            # Update scan run with results
             scan_run.status = ScanRunStatusChoices.STATUS_COMPLETED
             scan_run.completed_at = datetime.now(timezone.utc)
             scan_run.ips_discovered = ips_discovered
@@ -167,20 +148,15 @@ class NetworkRangeScanJob(JobRunner):
 
 
 class CiscoSwitchScanJob(JobRunner):
-    """
-    Background job to connect to a Cisco switch via SSH/SNMP and discover device details.
-    Creates/updates Device, Interface, and VLAN objects in NetBox.
-    """
 
     class Meta:
         name = "Cisco Switch Scan"
 
     def run(self, scanner_id: int) -> Dict[str, Any]:
-        """Execute the Cisco switch scan."""
 
         scanner = Scanner.objects.get(pk=scanner_id)
 
-        # Create ScanRun record
+
         scan_run = ScanRun.objects.create(
             scanner=scanner,
             status=ScanRunStatusChoices.STATUS_RUNNING,
@@ -193,17 +169,11 @@ class CiscoSwitchScanJob(JobRunner):
             log_lines.append(f"Starting Cisco switch scan for {scanner.target_hostname}")
             self.logger.info(f"Connecting to: {scanner.target_hostname}")
 
-            # Configure paramiko globally to support legacy SSH algorithms
-            # This MUST be done before creating the SSH connection
-            # Required for older Cisco IOS versions (12.4 and earlier)
-
-            # Store original values to restore later
             original_kex = paramiko.Transport._preferred_kex if hasattr(paramiko.Transport, '_preferred_kex') else None
             original_keys = paramiko.Transport._preferred_keys if hasattr(paramiko.Transport, '_preferred_keys') else None
             original_ciphers = paramiko.Transport._preferred_ciphers if hasattr(paramiko.Transport, '_preferred_ciphers') else None
 
             try:
-                # Set legacy-compatible algorithms
                 paramiko.Transport._preferred_kex = (
                     'diffie-hellman-group1-sha1',
                     'diffie-hellman-group14-sha1',
@@ -229,7 +199,6 @@ class CiscoSwitchScanJob(JobRunner):
 
                 log_lines.append(f"Configured legacy SSH algorithms for IOS 12.4 compatibility")
 
-                # Prepare connection parameters
                 device_params = {
                     'device_type': 'cisco_ios',
                     'host': scanner.target_hostname,
@@ -250,22 +219,17 @@ class CiscoSwitchScanJob(JobRunner):
 
                 log_lines.append(f"Attempting SSH connection to {scanner.target_hostname}:{scanner.ssh_port or 22}...")
 
-                # Connect to device
                 connection = ConnectHandler(**device_params)
                 log_lines.append("✓ SSH connection established")
 
-                # Get device information
                 log_lines.append("Gathering device information...")
 
-                # Get hostname
                 output = connection.send_command('show run | include hostname')
                 hostname = output.split()[-1] if output else scanner.target_hostname
                 log_lines.append(f"  Hostname: {hostname}")
 
-                # Get version info
                 version_output = connection.send_command('show version')
 
-                # Parse device info
                 model = self._parse_model(version_output)
                 serial = self._parse_serial(version_output)
                 os_version = self._parse_os_version(version_output)
@@ -274,29 +238,24 @@ class CiscoSwitchScanJob(JobRunner):
                 log_lines.append(f"  Serial: {serial}")
                 log_lines.append(f"  OS Version: {os_version}")
 
-                # Create or update device in NetBox
                 with transaction.atomic():
-                    # Ensure manufacturer exists
                     manufacturer, _ = Manufacturer.objects.get_or_create(
                         name='Cisco',
                         slug='cisco'
                     )
 
-                    # Ensure device type exists
                     device_type, _ = DeviceType.objects.get_or_create(
                         manufacturer=manufacturer,
                         model=model or 'Unknown',
                         defaults={'slug': (model or 'unknown').lower().replace(' ', '-')}
                     )
 
-                    # Ensure device role exists
                     device_role, _ = DeviceRole.objects.get_or_create(
                         name='Network Switch',
                         slug='network-switch',
                         defaults={'color': '2196f3'}
                     )
 
-                    # Create or update device
                     device, created = Device.objects.get_or_create(
                         name=hostname,
                         defaults={
@@ -318,7 +277,6 @@ class CiscoSwitchScanJob(JobRunner):
 
                     log_lines.append(f"{'Created' if created else 'Updated'} device: {device.name}")
 
-                    # Create discovery record
                     DiscoveredDevice.objects.create(
                         scan_run=scan_run,
                         device=device,
@@ -332,13 +290,10 @@ class CiscoSwitchScanJob(JobRunner):
                         }
                     )
 
-                    # Get interface information
                     log_lines.append("Discovering interfaces...")
-                    # Try switch command first, fall back to router command if output is empty
                     interface_output = connection.send_command('show interfaces status')
 
                     if not interface_output or len(interface_output.strip()) < 10:
-                        # Switch command didn't work, try router command
                         log_lines.append("  'show interfaces status' returned no data, trying router command...")
                         interface_output = connection.send_command('show ip interface brief')
                         log_lines.append("  Using 'show ip interface brief' (router command)")
@@ -348,7 +303,6 @@ class CiscoSwitchScanJob(JobRunner):
                     log_lines.append(f"  Interface output length: {len(interface_output)} chars")
                     interfaces_created = self._process_interfaces(device, interface_output, log_lines)
 
-                    # Get VLAN information (only for switches, routers don't have VLANs the same way)
                     log_lines.append("Discovering VLANs...")
                     vlan_output = connection.send_command('show vlan brief')
 
@@ -358,12 +312,10 @@ class CiscoSwitchScanJob(JobRunner):
                         log_lines.append("  (VLANs not available - device may be a router)")
                         vlans_created = 0
 
-                    # Close connection
                     connection.disconnect()
                     log_lines.append("✓ Connection closed")
 
             finally:
-                # Restore original paramiko settings
                 if original_kex is not None:
                     paramiko.Transport._preferred_kex = original_kex
                 if original_keys is not None:
@@ -371,7 +323,6 @@ class CiscoSwitchScanJob(JobRunner):
                 if original_ciphers is not None:
                     paramiko.Transport._preferred_ciphers = original_ciphers
 
-            # Update scan run with results
             scan_run.status = ScanRunStatusChoices.STATUS_COMPLETED
             scan_run.completed_at = datetime.now(timezone.utc)
             scan_run.devices_discovered = 1
@@ -425,7 +376,6 @@ class CiscoSwitchScanJob(JobRunner):
             }
 
     def _parse_model(self, version_output: str) -> str:
-        """Extract model from show version output."""
         for line in version_output.split('\n'):
             if 'cisco' in line.lower() and ('bytes' in line.lower() or 'processor' in line.lower()):
                 parts = line.split()
@@ -435,7 +385,6 @@ class CiscoSwitchScanJob(JobRunner):
         return 'Unknown'
 
     def _parse_serial(self, version_output: str) -> str:
-        """Extract serial number from show version output."""
         for line in version_output.split('\n'):
             if 'serial' in line.lower() or 'system serial number' in line.lower():
                 parts = line.split(':')
@@ -444,28 +393,21 @@ class CiscoSwitchScanJob(JobRunner):
         return ''
 
     def _parse_os_version(self, version_output: str) -> str:
-        """Extract OS version from show version output."""
         for line in version_output.split('\n'):
             if 'version' in line.lower() and ('ios' in line.lower() or 'software' in line.lower()):
                 return line.strip()
         return ''
 
     def _process_interfaces(self, device: Device, interface_output: str, log_lines: list) -> int:
-        """Process interface information and create Interface objects.
-        Handles both 'show interfaces status' (switches) and 'show ip interface brief' (routers) output.
-        """
         created_count = 0
         lines = interface_output.split('\n')
 
         log_lines.append(f"  Processing {len(lines)} lines of interface output")
 
-        # Determine output format and skip appropriate header lines
         if lines and 'Interface' in lines[0] and 'IP-Address' in lines[0]:
-            # Router format: show ip interface brief
             start_line = 1
             log_lines.append(f"  Detected router format (show ip interface brief)")
         else:
-            # Switch format: show interfaces status
             start_line = 2
             log_lines.append(f"  Detected switch format (show interfaces status)")
 
@@ -479,11 +421,9 @@ class CiscoSwitchScanJob(JobRunner):
 
             interface_name = parts[0]
 
-            # Skip invalid interface names
             if interface_name.lower() in ['interface', 'port', '----']:
                 continue
 
-            # Determine interface type based on name
             interface_type = 'other'
             if 'ethernet' in interface_name.lower() or 'eth' in interface_name.lower():
                 interface_type = '1000base-t'
@@ -494,7 +434,6 @@ class CiscoSwitchScanJob(JobRunner):
             elif 'serial' in interface_name.lower():
                 interface_type = 'other'
 
-            # Create interface if it doesn't exist
             interface, created = Interface.objects.get_or_create(
                 device=device,
                 name=interface_name,
@@ -514,10 +453,9 @@ class CiscoSwitchScanJob(JobRunner):
         return created_count
 
     def _process_vlans(self, site, vlan_output: str, log_lines: list) -> int:
-        """Process VLAN information and create VLAN objects."""
         created_count = 0
 
-        for line in vlan_output.split('\n')[2:]:  # Skip headers
+        for line in vlan_output.split('\n')[2:]:
             if not line.strip():
                 continue
 
@@ -529,7 +467,6 @@ class CiscoSwitchScanJob(JobRunner):
                 vlan_id = int(parts[0])
                 vlan_name = parts[1]
 
-                # Create VLAN if it doesn't exist
                 vlan, created = VLAN.objects.get_or_create(
                     vid=vlan_id,
                     name=vlan_name,
