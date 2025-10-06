@@ -72,6 +72,14 @@ if ! docker info &> /dev/null; then
 fi
 print_success "Docker daemon is running"
 
+# Check if jq is available (needed for JSON parsing)
+if ! command_exists jq; then
+    print_warning "jq is not installed - will use alternative health check method"
+    USE_JQ=false
+else
+    USE_JQ=true
+fi
+
 echo ""
 
 # Verify directory structure
@@ -198,7 +206,7 @@ echo ""
 print_success "Redis is ready"
 echo ""
 
-# Now start NetBox service
+# Now start NetBox service and wait for it to be healthy
 print_status "Starting NetBox application..."
 docker compose up -d netbox
 
@@ -207,52 +215,102 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-print_info "NetBox container started, waiting for application to be ready..."
+print_info "NetBox container started, waiting for it to become healthy..."
+print_info "This includes running all database migrations (may take several minutes on first run)"
 echo ""
 
-# Wait for NetBox to initialize and become healthy
-print_status "Waiting for NetBox to become healthy (this may take up to 5 minutes)..."
+# Wait for Docker's health check to pass - NO FIXED TIMEOUT
+# We monitor for actual progress instead
+print_status "Monitoring NetBox startup (will wait as long as progress is being made)..."
+echo ""
+
 attempt=0
-max_attempts=300  # 3 minutes with 1 second intervals
+last_log_line=""
+no_progress_count=0
+max_no_progress=8  # 8 checks with no progress = 2 minutes of inactivity = likely stuck
 
 while true; do
-    # Check if container is still running
-    if ! docker compose ps netbox | grep -q "Up"; then
-        print_error "NetBox container stopped unexpectedly"
-        echo ""
-        print_info "Check logs with: cd $NETBOX_DOCKER_DIR && docker compose logs netbox"
-        exit 1
+    # Check container health status
+    if [ "$USE_JQ" = true ]; then
+        health_status=$(docker compose ps netbox --format json 2>/dev/null | jq -r '.[0].Health // "unknown"' 2>/dev/null || echo "unknown")
+    else
+        if docker compose ps netbox | grep -q "(healthy)"; then
+            health_status="healthy"
+        elif docker compose ps netbox | grep -q "(unhealthy)"; then
+            health_status="unhealthy"
+        else
+            health_status="starting"
+        fi
     fi
 
-    # Check if health check passes (suppress output but check exit code)
-    if docker compose exec -T netbox curl -f -s -o /dev/null http://localhost:8080/login/; then
+    # Success! Container is healthy
+    if [ "$health_status" = "healthy" ]; then
+        echo ""
+        print_success "NetBox is healthy and ready!"
         break
     fi
 
-    attempt=$((attempt + 1))
-    if [ $attempt -ge $max_attempts ]; then
-        print_error "NetBox failed to become healthy after $max_attempts attempts"
+    # Container became unhealthy - something is wrong
+    if [ "$health_status" = "unhealthy" ]; then
         echo ""
-        print_info "Showing last 20 lines of logs:"
-        docker compose logs netbox --tail 20
+        print_error "NetBox container became unhealthy"
         echo ""
-        print_info "Check full logs with: cd $NETBOX_DOCKER_DIR && docker compose logs netbox"
+        print_info "Showing last 50 lines of logs:"
+        docker compose logs netbox --tail 50
+        echo ""
         exit 1
     fi
 
-    # Show progress every 10 seconds
-    if [ $((attempt % 10)) -eq 0 ]; then
-        echo -n " ${attempt}s"
-    else
-        echo -n "."
+    # Check if container crashed
+    if ! docker compose ps netbox | grep -q "Up"; then
+        echo ""
+        print_error "NetBox container stopped unexpectedly"
+        echo ""
+        print_info "Showing last 50 lines of logs:"
+        docker compose logs netbox --tail 50
+        echo ""
+        exit 1
     fi
 
-    sleep 1
-doneecho ""
-print_success "NetBox is healthy and ready"
-echo ""
+    # Monitor for progress by checking if new log lines are appearing
+    current_log_line=$(docker compose logs netbox --tail 1 2>/dev/null | tail -1)
 
-# Now start the worker
+    if [ "$current_log_line" != "$last_log_line" ]; then
+        # Progress detected! Reset the no-progress counter
+        no_progress_count=0
+        last_log_line="$current_log_line"
+
+        # Show what's happening (helpful during long migrations)
+        if [ $((attempt % 4)) -eq 0 ]; then
+            echo -n " [$(date +%H:%M:%S)]"
+        else
+            echo -n "."
+        fi
+    else
+        # No new logs - might be stuck
+        no_progress_count=$((no_progress_count + 1))
+        echo -n "?"
+
+        if [ $no_progress_count -ge $max_no_progress ]; then
+            echo ""
+            print_error "NetBox appears to be stuck (no log activity for 2 minutes)"
+            echo ""
+            print_info "Last log line was:"
+            echo "  $current_log_line"
+            echo ""
+            print_info "Showing last 50 lines of logs:"
+            docker compose logs netbox --tail 50
+            echo ""
+            print_info "Container might be waiting for user input or encountered an error"
+            exit 1
+        fi
+    fi
+
+    attempt=$((attempt + 1))
+    sleep 15
+done
+
+echo ""# Now start the worker
 print_status "Starting NetBox worker..."
 docker compose up -d netbox-worker
 

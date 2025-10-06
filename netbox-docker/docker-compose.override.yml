@@ -1,3 +1,23 @@
+# docker-compose.override.yml
+# NetBox Auto Discovery Plugin - Development Configuration
+#
+# IMPORTANT: Extended healthcheck for first-time setup with plugin migrations
+# -----------------------------------------------------------------------------
+# The base docker-compose.yml sets start_period: 90s, but on first run with the
+# plugin, NetBox needs to:
+#   1. Verify plugin installation
+#   2. Run core database migrations
+#   3. Run plugin migrations (creates Scanner, ScanRun, DiscoveredDevice, etc.)
+#   4. Collect static files
+#   5. Initialize the application
+#
+# This can take 3-5 minutes depending on system resources and database performance.
+# By extending start_period to 300s (5 minutes), we give NetBox enough time to
+# complete all migrations before Docker marks it as "healthy".
+#
+# The netbox-worker will automatically wait for NetBox to be healthy before starting
+# (inherited from base config: depends_on.netbox.condition: service_healthy)
+
 services:
   netbox:
     build:
@@ -12,6 +32,13 @@ services:
     #   - ../netbox-netbox-auto-discovery-plugin:/plugin/netbox-netbox-auto-discovery-plugin:rw
     environment:
       DEVELOPER: "true"
+    # Override healthcheck to accommodate plugin migrations on first run
+    healthcheck:
+      test: curl -f http://localhost:8080/login/ || exit 1
+      start_period: 300s  # Extended from 90s to 5 minutes for plugin migrations
+      timeout: 10s        # Increased from 3s for slower systems
+      interval: 15s       # Check every 15 seconds
+      retries: 5          # Allow 5 failed checks after start_period
 
   netbox-worker:
     image: netbox:latest-plugins
@@ -19,4 +46,6 @@ services:
     #   - ../netbox-netbox-auto-discovery-plugin:/plugin/netbox-netbox-auto-discovery-plugin:rw
     environment:
       DEVELOPER: "true"
+    # Worker inherits depends_on from base config (service_healthy condition)
+    # It will automatically wait for NetBox to be healthy before starting
 
