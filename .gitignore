@@ -24,8 +24,12 @@ MANIFEST
 # Virtual Environments
 venv/
 ENV/
-env/
+env/  # Python virtual environments
 .venv
+
+# IMPORTANT: Explicitly include netbox-docker/env/ config files
+!netbox-docker/env/
+!netbox-docker/env/*.env
 
 # IDE
 .vscode/
