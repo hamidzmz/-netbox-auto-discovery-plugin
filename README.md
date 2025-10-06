@@ -69,10 +69,8 @@ After 5-10 minutes, open your browser to **http://localhost:8000** and login wit
 │   ├── docs/                               # Documentation
 │   ├── README.md                           # Plugin documentation
 │   ├── ARCHITECTURE.md                     # Design decisions
-│   ├── DEPLOYMENT_GUIDE.md                 # Detailed setup guide
-│   └── TECHNICAL_VERIFICATION.md           # Implementation details
 │
-└── setup-monorepo.sh                       # Automated setup script (YOU ARE HERE)
+└── setup-monorepo.sh                       # Automated setup script
 ```
 
 ---
@@ -372,9 +370,6 @@ docker compose restart netbox netbox-worker
 | Document | Description |
 |----------|-------------|
 | [README.md](netbox-netbox-auto-discovery-plugin/README.md) | Plugin overview and features |
-| [DEPLOYMENT_GUIDE.md](netbox-netbox-auto-discovery-plugin/DEPLOYMENT_GUIDE.md) | Detailed installation instructions |
-| [ARCHITECTURE.md](netbox-netbox-auto-discovery-plugin/ARCHITECTURE.md) | Design decisions and architecture |
-| [TECHNICAL_VERIFICATION.md](netbox-netbox-auto-discovery-plugin/TECHNICAL_VERIFICATION.md) | Implementation details |
 | [API Docs](http://localhost:8000/api/docs/) | Interactive API documentation |
 
 ---
@@ -643,35 +638,13 @@ class ScannerViewSet(NetBoxModelViewSet):
 {% endblock %}
 ```
 
-#### 10. **Testing Strategy**
-
-**Decision:** Docker-based integration testing with virtual/real Cisco devices.
-
-**Rationale:**
-- **Realistic Environment:** Tests against actual NetBox instance
-- **Containerlab/GNS3 Compatible:** Can spin up virtual Cisco switches
-- **End-to-End Testing:** Validates entire workflow (UI → Job → Database)
-- **CI/CD Ready:** Docker-based tests run in GitHub Actions
-
-**Testing Pyramid:**
-```
-Unit Tests (models, forms, utilities)
-    ↓
-Integration Tests (API, views)
-    ↓
-End-to-End Tests (full scan workflows)
-```
-
-#### 11. **Documentation Architecture**
+#### 10. **Documentation Architecture**
 
 **Decision:** Multi-document approach with Mkdocs for plugin docs and GitHub README for repo overview.
 
 **Rationale:**
 - **Separation of Concerns:**
   - **README.md:** Quick start for evaluators/users
-  - **ARCHITECTURE.md:** Deep technical design decisions
-  - **DEPLOYMENT_GUIDE.md:** Step-by-step setup instructions
-  - **TECHNICAL_VERIFICATION.md:** Implementation proof points
   - **docs/:** Mkdocs site for hosted documentation
 
 **Mkdocs Benefits:**
@@ -679,7 +652,7 @@ End-to-End Tests (full scan workflows)
 - Searchable, versioned documentation
 - GitHub Pages hosting (zero-config with Cookiecutter template)
 
-#### 12. **Monorepo Structure**
+#### 11. **Monorepo Structure**
 
 **Decision:** Include both plugin and configured netbox-docker in same repository.
 
@@ -721,20 +694,6 @@ End-to-End Tests (full scan workflows)
 4. **Observer Pattern:** Change logging via Django signals
 5. **Template Method:** NetBox generic views provide template structure
 
-### Security Considerations
-
-**Current Implementation (Demo/Evaluation):**
-- ⚠️ Credentials stored in plaintext
-- ⚠️ HTTP-only (no SSL/TLS)
-- ⚠️ Default admin password (`admin`)
-
-**Production Recommendations:**
-- 🔒 Integrate with NetBox Secrets or external vaults (HashiCorp Vault, AWS Secrets Manager)
-- 🔒 Enable HTTPS with valid certificates
-- 🔒 Enforce strong password policies
-- 🔒 Implement rate limiting on scan execution
-- 🔒 Audit logging for all credential access
-
 ### Performance Optimizations
 
 1. **Database Queries:**
@@ -752,80 +711,41 @@ End-to-End Tests (full scan workflows)
    - Field filtering to reduce payload size
    - Caching headers for static data
 
-### Future Enhancements
-
-Documented but not implemented (out of scope for evaluation):
-
-1. **Additional Scanner Types:**
-   - SNMP walk discovery
-   - ARP table scanning
-   - LLDP/CDP neighbor discovery
-   - Cloud provider API scanning (AWS, Azure, GCP)
-
-2. **Advanced Features:**
-   - Scheduled/recurring scans (cron-like)
-   - Differential scanning (detect changes)
-   - Automatic device classification
-   - Integration with IPAM reconciliation
-
-3. **Credential Management:**
-   - Integration with NetBox Secrets
-   - Credential rotation
-   - Multi-factor authentication for device access
-
-4. **Reporting:**
-   - Scan success/failure reports
-   - Discovery trend analysis
-   - Compliance checking
-
 ---
 
-## �🎓 Project Context
-
-This plugin was developed as part of a technical interview/evaluation. Key requirements:
-
-1. **Scanner Types:** Network range and Cisco switch discovery
-2. **Data Persistence:** Use NetBox native models only
-3. **Background Processing:** Long-running scans via jobs
-4. **Full CRUD:** Web UI and REST API
-5. **Testing:** Validate with real/virtual Cisco devices
-6. **Documentation:** Architecture, deployment, and usage guides
-7. **Deliverables:** Git repo, screenshots, working demo
-
-**Development Timeline:**
-- Phase 1: Data models and migrations (2 days)
-- Phase 2: Background jobs and scan logic (3 days)
-- Phase 3: Web UI (views, forms, templates) (2 days)
-- Phase 4: REST API (1 day)
-- Phase 5: Docker integration and testing (2 days)
-- Phase 6: Documentation and polish (1 day)
-
-**Total Development Time:** ~11 days
-
----
-
-## 🔒 Security Notes
-
-⚠️ **This is a demonstration/testing environment:**
-
-- Credentials are stored in plaintext (not production-ready)
-- Default admin password is `admin` (change immediately for any real use)
-- No SSL/TLS (HTTP only)
-- For production, integrate with NetBox Secrets or external vaults
-
----
 
 ## 📸 Screenshots
 
-After testing, you can find screenshots demonstrating:
-- Scanner creation forms
-- Network range scan results
-- Cisco switch discovery
-- Scan run history
-- Discovered IP addresses in NetBox
-- API responses
+Below are screenshots demonstrating the plugin's functionality:
 
-*(Create a `screenshots/` folder and add images here)*
+### Scanners Management
+![Scanners List](screenshots/Scanners.png)
+*Scanner list view showing configured network range and Cisco switch scanners*
+
+### Scan Execution
+![Scan Run Details](screenshots/ScanRun.png)
+*Scan run detail page with execution logs, discovered resources, and status*
+
+### Discovery Results - Devices
+![Discovered Devices](screenshots/Discovered%20Devices.png)
+*Discovered devices audit trail showing which devices were created or updated during scans*
+
+![Device Details](screenshots/Devices.png)
+*Device detail view in NetBox DCIM showing discovered Cisco switch with full details*
+
+![Device Interfaces](screenshots/Interfaces.png)
+*Interface list showing discovered interfaces from Cisco switch scan*
+
+### Discovery Results - IP Addresses
+![Discovered IP Addresses](screenshots/Discovered%20IP%20Addresses.png)
+*Discovered IP addresses audit trail from network range scans*
+
+![IP Address List](screenshots/IP%20Addresses.png)
+*IP address list in NetBox IPAM showing discovered IPs with hostnames and status*
+
+### Testing Environment
+![GNS3 Topology](screenshots/Gns3Topology.png)
+*GNS3 virtual lab topology used for testing Cisco switch discovery*
 
 ---
 
@@ -846,23 +766,4 @@ Apache License 2.0 - See [LICENSE](LICENSE) file for details.
 
 ---
 
-## ✅ Evaluation Checklist
-
-- [ ] Cloned repository successfully
-- [ ] Ran `setup-monorepo.sh` without errors
-- [ ] Accessed NetBox at http://localhost:8000
-- [ ] Created a network range scanner
-- [ ] Ran a network scan successfully
-- [ ] Viewed discovered IP addresses
-- [ ] Tested the REST API
-- [ ] Reviewed code quality and structure
-- [ ] Checked documentation completeness
-- [ ] Evaluated UI/UX design
-
----
-
 **Thank you for reviewing this project!** 🙏
-
-For detailed technical information, see [ARCHITECTURE.md](netbox-netbox-auto-discovery-plugin/ARCHITECTURE.md).
-
-For setup troubleshooting, see [DEPLOYMENT_GUIDE.md](netbox-netbox-auto-discovery-plugin/DEPLOYMENT_GUIDE.md).
