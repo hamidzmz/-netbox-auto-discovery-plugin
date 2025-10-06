@@ -1,0 +1,29 @@
+# Dockerfile-Plugins
+# Custom NetBox image with Auto Discovery plugin
+FROM netboxcommunity/netbox:v4.4-3.4.1
+
+# Switch to root to install packages
+USER root
+
+# Install nmap for network scanning
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends nmap && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy the plugin source code into the image
+COPY netbox-netbox-auto-discovery-plugin /tmp/netbox-netbox-auto-discovery-plugin
+
+# Set the virtual environment
+ENV VIRTUAL_ENV=/opt/netbox/venv
+
+# Install the plugin directly from the copied source
+RUN /usr/local/bin/uv pip install --no-cache /tmp/netbox-netbox-auto-discovery-plugin
+
+# Clean up the temporary source
+RUN rm -rf /tmp/netbox-netbox-auto-discovery-plugin
+
+# Collect static files for the plugins (may fail if no static files, that's OK)
+RUN SECRET_KEY="dummyKeyWithMinimumLength-------------------------" /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py collectstatic --no-input || true
+
+# Switch back to unit user
+USER unit:root

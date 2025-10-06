@@ -1,0 +1,3 @@
+# NetBox Auto Discovery Plugin - Local Development Installation
+# Install local plugin in editable mode for development
+-e /plugin/netbox-netbox-auto-discovery-plugin
