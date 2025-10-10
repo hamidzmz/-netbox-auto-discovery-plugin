@@ -1,8 +1,11 @@
 from django.contrib.postgres.fields import ArrayField
-from django.core.validators import MinValueValidator, MaxValueValidator
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, MaxValueValidator, validate_ipv46_address
 from django.db import models
 from django.urls import reverse
 from netbox.models import NetBoxModel
+import ipaddress
+import re
 
 from .choices import (
     ScannerTypeChoices,
@@ -142,6 +145,75 @@ class Scanner(NetBoxModel):
 
     def get_absolute_url(self):
         return reverse('plugins:netbox_netbox_auto_discovery_plugin:scanner', args=[self.pk])
+
+    def clean(self):
+        super().clean()
+        errors = {}
+
+        if self.scanner_type == ScannerTypeChoices.TYPE_NETWORK_RANGE:
+            if not self.cidr_range:
+                errors['cidr_range'] = 'CIDR range is required for network range scans.'
+            else:
+                try:
+                    network = ipaddress.ip_network(self.cidr_range, strict=False)
+                    if network.num_addresses > 16777216:
+                        errors['cidr_range'] = f'CIDR range is too large ({network.num_addresses:,} addresses). Consider scanning smaller subnets.'
+                except ValueError as e:
+                    errors['cidr_range'] = f'Invalid CIDR notation: {self.cidr_range}. Expected format: 192.168.1.0/24'
+
+        elif self.scanner_type == ScannerTypeChoices.TYPE_CISCO_SWITCH:
+            if not self.target_hostname:
+                errors['target_hostname'] = 'Target hostname or IP address is required for Cisco switch scans.'
+            else:
+                if not self._is_valid_hostname_or_ip(self.target_hostname):
+                    errors['target_hostname'] = f'Invalid hostname or IP address: {self.target_hostname}'
+
+            if not self.connection_protocol:
+                errors['connection_protocol'] = 'Connection protocol is required for Cisco switch scans.'
+
+            if self.connection_protocol == ConnectionProtocolChoices.PROTOCOL_SSH:
+                if not self.ssh_username:
+                    errors['ssh_username'] = 'SSH username is required when using SSH protocol.'
+                if not self.ssh_password:
+                    errors['ssh_password'] = 'SSH password is required when using SSH protocol.'
+
+            elif self.connection_protocol == ConnectionProtocolChoices.PROTOCOL_SNMP_V2C:
+                if not self.snmp_community:
+                    errors['snmp_community'] = 'SNMP community string is required for SNMP v2c protocol.'
+
+            elif self.connection_protocol == ConnectionProtocolChoices.PROTOCOL_SNMP_V3:
+                if not self.snmp_v3_username:
+                    errors['snmp_v3_username'] = 'SNMP v3 username is required for SNMP v3 protocol.'
+                
+                if not self.snmp_v3_auth_protocol:
+                    errors['snmp_v3_auth_protocol'] = 'SNMP v3 authentication protocol is required.'
+                elif self.snmp_v3_auth_protocol.upper() not in ['MD5', 'SHA', 'SHA1']:
+                    errors['snmp_v3_auth_protocol'] = 'Must be MD5, SHA, or SHA1.'
+                
+                if not self.snmp_v3_auth_key:
+                    errors['snmp_v3_auth_key'] = 'SNMP v3 authentication key is required.'
+                
+                if self.snmp_v3_priv_protocol and not self.snmp_v3_priv_key:
+                    errors['snmp_v3_priv_key'] = 'Privacy key is required when privacy protocol is specified.'
+                
+                if self.snmp_v3_priv_protocol and self.snmp_v3_priv_protocol.upper() not in ['DES', 'AES', 'AES128']:
+                    errors['snmp_v3_priv_protocol'] = 'Must be DES, AES, or AES128.'
+
+        if errors:
+            raise ValidationError(errors)
+
+    def _is_valid_hostname_or_ip(self, value):
+        try:
+            validate_ipv46_address(value)
+            return True
+        except ValidationError:
+            pass
+
+        hostname_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$'
+        if re.match(hostname_pattern, value) and len(value) <= 253:
+            return True
+
+        return False
 
 
 class ScanRun(NetBoxModel):
